@@ -33,3 +33,6 @@ Thumbs.db
 
 # Prisma (if using Prisma ORM)
 prisma/migrations/*.sql.bak
+
+.cursor/
+.claude/
