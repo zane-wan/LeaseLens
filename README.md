@@ -137,7 +137,7 @@ Wave 5 (parallel):  T7a  T7b
 ### Branch naming
 
 ```
-zw/feature-name
+<your-initials>/feature-name
 ```
 
 Use your initials as prefix (e.g. `zw/`, `jl/`).
