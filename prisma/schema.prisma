@@ -1,0 +1,134 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  name          String?
+  image         String?
+  emailVerified Boolean   @default(false)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  accounts   Account[]
+  sessions   Session[]
+  agreements Agreement[]
+}
+
+model Account {
+  id                   String    @id @default(cuid())
+  userId               String
+  accountId            String
+  providerId           String
+  accessToken          String?
+  refreshToken         String?
+  accessTokenExpiresAt DateTime?
+  scope                String?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([providerId, accountId])
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  userId    String
+  token     String   @unique
+  expiresAt DateTime
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Verification {
+  id         String   @id @default(cuid())
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+model Agreement {
+  id         String          @id @default(cuid())
+  userId     String
+  fileName   String
+  s3Key      String          @unique
+  s3Url      String?
+  status     AgreementStatus @default(PENDING)
+  uploadedAt DateTime        @default(now())
+  updatedAt  DateTime        @updatedAt
+
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  analysis Analysis?
+
+  @@index([userId])
+}
+
+enum AgreementStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+model Analysis {
+  id           String         @id @default(cuid())
+  agreementId  String         @unique
+  status       AnalysisStatus @default(QUEUED)
+  errorMessage String?
+  startedAt    DateTime?
+  completedAt  DateTime?
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  agreement     Agreement      @relation(fields: [agreementId], references: [id], onDelete: Cascade)
+  clauseResults ClauseResult[]
+}
+
+enum AnalysisStatus {
+  QUEUED
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+model ClauseResult {
+  id           String          @id @default(cuid())
+  analysisId   String
+  clauseIndex  Int
+  clauseTitle  String
+  clauseText   String
+  compliance   ComplianceLabel
+  explanation  String
+  rtaCitations String[]
+  severity     Severity?
+  createdAt    DateTime        @default(now())
+
+  analysis Analysis @relation(fields: [analysisId], references: [id], onDelete: Cascade)
+
+  @@unique([analysisId, clauseIndex])
+  @@index([analysisId])
+}
+
+enum ComplianceLabel {
+  COMPLIANT
+  NON_COMPLIANT
+  NEEDS_REVIEW
+}
+
+enum Severity {
+  LOW
+  MEDIUM
+  HIGH
+}
