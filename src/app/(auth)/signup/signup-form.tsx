@@ -5,12 +5,12 @@ import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardFooter } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
-import { loginWithCredentials, loginWithGoogle, type LoginState } from "./actions"
+import { signupWithCredentials, signupWithGoogle, type SignupState } from "./actions"
 
-const initialState: LoginState = {}
+const initialState: SignupState = {}
 
-export function LoginForm() {
-  const [state, formAction, isPending] = useActionState(loginWithCredentials, initialState)
+export function SignupForm() {
+  const [state, formAction, isPending] = useActionState(signupWithCredentials, initialState)
 
   return (
     <Card>
@@ -22,6 +22,27 @@ export function LoginForm() {
               {state.errors.general[0]}
             </p>
           )}
+
+          {/* Name */}
+          <div className="space-y-2">
+            <label
+              htmlFor="name"
+              className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+            >
+              Name
+            </label>
+            <Input
+              id="name"
+              name="name"
+              type="text"
+              placeholder="Jane Doe"
+              autoComplete="name"
+              aria-invalid={!!state.errors?.name}
+            />
+            {state.errors?.name && (
+              <p className="text-xs text-destructive">{state.errors.name[0]}</p>
+            )}
+          </div>
 
           {/* Email */}
           <div className="space-y-2">
@@ -46,30 +67,43 @@ export function LoginForm() {
 
           {/* Password */}
           <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <label
-                htmlFor="password"
-                className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-              >
-                Password
-              </label>
-              <Link
-                href="/forgot-password"
-                className="text-xs text-muted-foreground underline-offset-4 hover:underline"
-              >
-                Forgot password?
-              </Link>
-            </div>
+            <label
+              htmlFor="password"
+              className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+            >
+              Password
+            </label>
             <Input
               id="password"
               name="password"
               type="password"
               placeholder="••••••••"
-              autoComplete="current-password"
+              autoComplete="new-password"
               aria-invalid={!!state.errors?.password}
             />
             {state.errors?.password && (
               <p className="text-xs text-destructive">{state.errors.password[0]}</p>
+            )}
+          </div>
+
+          {/* Confirm password */}
+          <div className="space-y-2">
+            <label
+              htmlFor="confirmPassword"
+              className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+            >
+              Confirm password
+            </label>
+            <Input
+              id="confirmPassword"
+              name="confirmPassword"
+              type="password"
+              placeholder="••••••••"
+              autoComplete="new-password"
+              aria-invalid={!!state.errors?.confirmPassword}
+            />
+            {state.errors?.confirmPassword && (
+              <p className="text-xs text-destructive">{state.errors.confirmPassword[0]}</p>
             )}
           </div>
         </CardContent>
@@ -77,7 +111,7 @@ export function LoginForm() {
         <CardFooter className="flex flex-col gap-4">
           {/* Credentials submit */}
           <Button type="submit" className="w-full" disabled={isPending}>
-            {isPending ? "Signing in…" : "Sign in"}
+            {isPending ? "Creating account…" : "Create account"}
           </Button>
 
           {/* Divider */}
@@ -90,7 +124,8 @@ export function LoginForm() {
             </div>
           </div>
 
-          <Button type="submit" formAction={loginWithGoogle} variant="outline" className="w-full">
+          {/* Google OAuth */}
+          <Button type="submit" formAction={signupWithGoogle} variant="outline" className="w-full">
             <svg className="mr-2 size-4" viewBox="0 0 24 24" aria-hidden>
               <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />
               <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
@@ -101,9 +136,9 @@ export function LoginForm() {
           </Button>
 
           <p className="text-center text-sm text-muted-foreground">
-            Don&apos;t have an account?{" "}
-            <Link href="/signup" className="font-medium text-primary underline-offset-4 hover:underline">
-              Sign up
+            Already have an account?{" "}
+            <Link href="/login" className="font-medium text-primary underline-offset-4 hover:underline">
+              Sign in
             </Link>
           </p>
         </CardFooter>
