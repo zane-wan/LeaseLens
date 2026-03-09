@@ -7,13 +7,14 @@ import { Button, buttonVariants } from "@/components/ui/button"
 interface AgreementListProps {
   agreements: AgreementItem[]
   onAnalyze: (id: string) => void
+  onDelete: (id: string) => void
 }
 
 const statusLabel: Record<AgreementItem["status"], string> = {
-  PENDING: "待分析",
-  PROCESSING: "分析中",
-  COMPLETED: "已完成",
-  FAILED: "失败",
+  PENDING: "To analyze",
+  PROCESSING: "Analyzing",
+  COMPLETED: "Completed",
+  FAILED: "Failed",
 }
 
 const statusVariant: Record<AgreementItem["status"], "secondary" | "default" | "outline" | "destructive"> = {
@@ -23,9 +24,9 @@ const statusVariant: Record<AgreementItem["status"], "secondary" | "default" | "
   FAILED: "destructive",
 }
 
-export function AgreementList({ agreements, onAnalyze }: AgreementListProps) {
+export function AgreementList({ agreements, onAnalyze, onDelete }: AgreementListProps) {
   if (agreements.length === 0) {
-    return <p className="text-muted-foreground text-sm mt-6">还没有上传的协议</p>
+    return <p className="text-muted-foreground text-sm mt-6">No agreements uploaded yet</p>
   }
 
   return (
@@ -43,12 +44,12 @@ export function AgreementList({ agreements, onAnalyze }: AgreementListProps) {
             <span>{new Date(a.uploadedAt).toLocaleDateString("zh-CN")}</span>
             {a.status === "PENDING" && (
               <Button size="sm" onClick={() => onAnalyze(a.id)}>
-                开始分析
+                Start analysis
               </Button>
             )}
             {a.status === "PROCESSING" && (
               <Button size="sm" disabled>
-                分析中…
+                Analyzing...
               </Button>
             )}
             {a.status === "COMPLETED" && (
@@ -56,14 +57,22 @@ export function AgreementList({ agreements, onAnalyze }: AgreementListProps) {
                 href={`/agreements/${a.id}`}
                 className={buttonVariants({ size: "sm", variant: "outline" })}
               >
-                查看结果
+                View results
               </a>
             )}
             {a.status === "FAILED" && (
               <Button size="sm" variant="destructive" onClick={() => onAnalyze(a.id)}>
-                重试
+                Retry
               </Button>
             )}
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => onDelete(a.id)}
+              className="text-destructive hover:text-destructive"
+            >
+              Delete
+            </Button>
           </div>
         </li>
       ))}

@@ -24,11 +24,11 @@ export function useUpload(): UseUploadReturn {
 
   const upload = useCallback(async (file: File) => {
     if (file.type !== "application/pdf") {
-      setUploadState({ status: "error", progress: 0, errorMessage: "只支持 PDF 文件" })
+      setUploadState({ status: "error", progress: 0, errorMessage: "Only PDF files are supported" })
       return null
     }
     if (file.size > MAX_SIZE_BYTES) {
-      setUploadState({ status: "error", progress: 0, errorMessage: "文件不能超过 20MB" })
+      setUploadState({ status: "error", progress: 0, errorMessage: "File size cannot be greater than 20MB" })
       return null
     }
 
@@ -39,20 +39,22 @@ export function useUpload(): UseUploadReturn {
       const presignedRes = await fetch(
         `/api/upload/presigned?fileName=${encodeURIComponent(file.name)}&contentType=application/pdf`
       )
-      if (!presignedRes.ok) throw new Error("获取上传链接失败")
+      if (!presignedRes.ok) throw new Error("get presigned URL failed")
       const { url, key } = await presignedRes.json()
 
       setUploadState({ status: "uploading", progress: 30, errorMessage: null })
 
-      // 2. Upload to S3
-      const uploadRes = await fetch(url, {
-        method: "PUT",
-        body: file,
-        headers: { "Content-Type": "application/pdf" },
-      })
-      // Mock will return non-OK; treat it as success in dev
-      if (!uploadRes.ok && url !== "https://mock-s3.example.com/upload") {
-        throw new Error("上传文件失败")
+      // 2. Upload to S3 (mock URL will throw a network error — swallow it in dev)
+      try {
+        const uploadRes = await fetch(url, {
+          method: "PUT",
+          body: file,
+          headers: { "Content-Type": "application/pdf" },
+        })
+        if (!uploadRes.ok) throw new Error("Upload file failed")
+      } catch (s3Err) {
+        if (url !== "https://mock-s3.example.com/upload") throw s3Err
+        // Expected: mock URL is unreachable, skip
       }
 
       setUploadState({ status: "uploading", progress: 80, errorMessage: null })
@@ -63,13 +65,13 @@ export function useUpload(): UseUploadReturn {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ fileName: file.name, s3Key: key }),
       })
-      if (!agreementRes.ok) throw new Error("创建记录失败")
+      if (!agreementRes.ok) throw new Error("create agreement record failed")
       const agreement = await agreementRes.json()
 
       setUploadState({ status: "success", progress: 100, errorMessage: null })
       return { id: agreement.id, s3Key: key }
     } catch (err) {
-      const message = err instanceof Error ? err.message : "上传失败，请重试"
+      const message = err instanceof Error ? err.message : "create agreement record failed, please try again"
       setUploadState({ status: "error", progress: 0, errorMessage: message })
       return null
     }

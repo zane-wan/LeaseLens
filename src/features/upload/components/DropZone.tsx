@@ -39,14 +39,14 @@ export function DropZone({ uploadState, onFileDrop, onReset }: DropZoneProps) {
         <input {...getInputProps()} />
         {uploadState.status === "idle" && (
           <p className="text-muted-foreground">
-            {isDragActive ? "松开以上传" : "拖入 PDF 文件，或点击选择"}
+            {isDragActive ? "Release to upload" : "Drag and drop PDF file, or click to select"}
           </p>
         )}
         {uploadState.status === "uploading" && (
-          <p className="text-muted-foreground">上传中…</p>
+          <p className="text-muted-foreground">Uploading...</p>
         )}
         {uploadState.status === "success" && (
-          <p className="text-green-600">上传成功 ✓</p>
+          <p className="text-green-600">Upload successful ✓</p>
         )}
         {uploadState.status === "error" && (
           <p className="text-destructive">{uploadState.errorMessage}</p>
@@ -61,8 +61,8 @@ export function DropZone({ uploadState, onFileDrop, onReset }: DropZoneProps) {
         <button
           onClick={onReset}
           className="mt-2 text-sm text-muted-foreground underline"
-        >
-          再上传一个
+        > 
+          Upload another one
         </button>
       )}
     </div>

@@ -30,15 +30,20 @@ export default function DashboardPage() {
     fetchAgreements()
   }
 
+  const handleDelete = async (id: string) => {
+    await fetch(`/api/agreements/${id}`, { method: "DELETE" })
+    fetchAgreements()
+  }
+
   return (
     <main className="max-w-3xl mx-auto px-4 py-10">
-      <h1 className="text-2xl font-bold mb-6">我的协议</h1>
+      <h1 className="text-2xl font-bold mb-6">My Agreements</h1>
       <DropZone
         uploadState={uploadState}
         onFileDrop={handleFileDrop}
         onReset={reset}
       />
-      <AgreementList agreements={agreements} onAnalyze={handleAnalyze} />
+      <AgreementList agreements={agreements} onAnalyze={handleAnalyze} onDelete={handleDelete} />
     </main>
   )
 }
