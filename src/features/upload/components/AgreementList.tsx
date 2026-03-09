@@ -2,7 +2,7 @@
 
 import { AgreementItem } from "../types"
 import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
+import { Button, buttonVariants } from "@/components/ui/button"
 
 interface AgreementListProps {
   agreements: AgreementItem[]
@@ -52,9 +52,12 @@ export function AgreementList({ agreements, onAnalyze }: AgreementListProps) {
               </Button>
             )}
             {a.status === "COMPLETED" && (
-              <Button size="sm" variant="outline" asChild>
-                <a href={`/agreements/${a.id}`}>查看结果</a>
-              </Button>
+              <a
+                href={`/agreements/${a.id}`}
+                className={buttonVariants({ size: "sm", variant: "outline" })}
+              >
+                查看结果
+              </a>
             )}
             {a.status === "FAILED" && (
               <Button size="sm" variant="destructive" onClick={() => onAnalyze(a.id)}>
