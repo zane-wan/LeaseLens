@@ -36,3 +36,5 @@ prisma/migrations/*.sql.bak
 
 .cursor/
 .claude/
+
+docs/
