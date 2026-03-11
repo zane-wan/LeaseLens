@@ -11,13 +11,20 @@ model User {
   email         String    @unique
   name          String?
   image         String?
+  role          UserRole  @default(USER)
+  passwordHash  String?
   emailVerified Boolean   @default(false)
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
-  accounts   Account[]
-  sessions   Session[]
-  agreements Agreement[]
+  accounts       Account[]
+  sessions       Session[]
+  agreements     Agreement[]
+  supportThreads SupportThread[]
+  supportMessages SupportMessage[]
+  chatSessions   ChatSession[]
+  chatMessages   ChatMessage[]
+  memoryItems    MemoryItem[]
 }
 
 model Account {
@@ -71,6 +78,8 @@ model Agreement {
 
   user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   analysis Analysis?
+  chatSessions ChatSession[]
+  memoryItems  MemoryItem[]
 
   @@index([userId])
 }
@@ -131,4 +140,115 @@ enum Severity {
   LOW
   MEDIUM
   HIGH
+}
+
+enum UserRole {
+  OWNER
+  ADMIN
+  USER
+}
+
+model SupportThread {
+  id          String              @id @default(cuid())
+  ownerUserId String
+  subject     String
+  status      SupportThreadStatus @default(OPEN)
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+
+  owner    User             @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
+  messages SupportMessage[]
+
+  @@index([ownerUserId])
+}
+
+model SupportMessage {
+  id             String         @id @default(cuid())
+  threadId       String
+  senderUserId   String
+  senderRole     UserRole
+  direction      MessageDirection @default(INBOUND)
+  recipientEmail String
+  subject        String
+  body           String
+  createdAt      DateTime       @default(now())
+
+  thread SupportThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  sender User          @relation(fields: [senderUserId], references: [id], onDelete: Cascade)
+
+  @@index([threadId])
+  @@index([senderUserId])
+}
+
+model ChatSession {
+  id          String   @id @default(cuid())
+  userId      String
+  agreementId String?
+  title       String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user       User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  agreement  Agreement?   @relation(fields: [agreementId], references: [id], onDelete: SetNull)
+  messages   ChatMessage[]
+  memoryItems MemoryItem[]
+
+  @@index([userId])
+  @@index([agreementId])
+}
+
+model ChatMessage {
+  id         String      @id @default(cuid())
+  sessionId  String
+  userId     String
+  role       ChatRole
+  content    String
+  citations  String[]
+  createdAt  DateTime    @default(now())
+
+  session ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  user    User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId])
+  @@index([userId])
+}
+
+model MemoryItem {
+  id          String      @id @default(cuid())
+  userId      String
+  sessionId   String?
+  agreementId String?
+  scope       MemoryScope
+  summary     String
+  createdAt   DateTime    @default(now())
+
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  session   ChatSession? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+  agreement Agreement?   @relation(fields: [agreementId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([sessionId])
+  @@index([agreementId])
+}
+
+enum SupportThreadStatus {
+  OPEN
+  CLOSED
+}
+
+enum MessageDirection {
+  INBOUND
+  OUTBOUND
+}
+
+enum ChatRole {
+  SYSTEM
+  USER
+  ASSISTANT
+}
+
+enum MemoryScope {
+  ACCOUNT
+  AGREEMENT
+  SESSION
 }

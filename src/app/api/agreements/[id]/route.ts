@@ -1,23 +1,31 @@
 import { NextRequest, NextResponse } from "next/server"
+import { AuthError, requireAuthFromRequest } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 
 export async function DELETE(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const { id } = await params
-  const userId = "dev-user"
+  try {
+    const user = await requireAuthFromRequest(req)
+    const { id } = await params
 
-  const agreement = await prisma.agreement.findUnique({ where: { id } })
+    const agreement = await prisma.agreement.findUnique({ where: { id } })
 
-  if (!agreement) {
-    return NextResponse.json({ error: "Not found" }, { status: 404 })
+    if (!agreement) {
+      return NextResponse.json({ error: "Not found" }, { status: 404 })
+    }
+    if (agreement.userId !== user.id) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+    }
+
+    await prisma.agreement.delete({ where: { id } })
+
+    return new NextResponse(null, { status: 204 })
+  } catch (err) {
+    if (err instanceof AuthError) {
+      return NextResponse.json({ error: err.message }, { status: err.status })
+    }
+    return NextResponse.json({ error: "Failed to delete agreement" }, { status: 500 })
   }
-  if (agreement.userId !== userId) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 })
-  }
-
-  await prisma.agreement.delete({ where: { id } })
-
-  return new NextResponse(null, { status: 204 })
 }
