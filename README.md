@@ -100,11 +100,11 @@ src/
 | ID | Sub-task | Assignee | Dependencies |
 |----|----------|----------|-------------|
 | T1a | Google OAuth setup (Better Auth + provider config) | Zihan | None |
-| T1b | Login/signup pages | TBD | T1a |
+| T1b | Login/signup pages | Ruiwu | T1a |
 | T2a | S3 presigned URL backend | Zihan | None |
 | T2b | Drag-drop upload UI + PDF parsing | Yiyang | T2a |
 | T3 | Database schema + Prisma models (agreements, analyses, users) | yiyang | None |
-| T4 | Dashboard UI (agreement list, status badges, detail view) | TBD | T1, T3 |
+| T4 | Dashboard UI (agreement list, status badges, detail view) | Ruiwu | T1, T3 |
 | T5a | RAG retrieval + LLM orchestration | Zihan | T3 |
 | T5b | Analysis results storage | Yiyang| T5a, T3 |
 | T6 | Analysis results UI (clause cards, compliance badges, citations) | TBD | T4, T5 |
