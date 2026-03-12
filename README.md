@@ -10,7 +10,7 @@ AI-powered Ontario residential lease compliance analyzer — upload a lease, get
 | UI | React 19, Tailwind CSS v4, shadcn/ui |
 | State | Redux Toolkit |
 | Database | PostgreSQL + Prisma ORM |
-| Auth | Better Auth + Google OAuth |
+| Auth | JWT + Google OAuth |
 | AI | Vercel AI SDK + OpenAI GPT-4o |
 | Validation | Zod |
 | Storage | AWS S3 (lease PDFs) |
@@ -39,10 +39,10 @@ AWS_SECRET_ACCESS_KEY=
 AWS_S3_BUCKET=
 AWS_REGION=
 
-# Google OAuth (Better Auth)
+# Auth
+JWT_SECRET=
 GOOGLE_CLIENT_ID=
 GOOGLE_CLIENT_SECRET=
-BETTER_AUTH_SECRET=
 ```
 
 Run the dev server:
@@ -66,7 +66,7 @@ src/
 │   │   ├── upload/               # Lease upload page
 │   │   └── agreements/[id]/      # Single agreement detail
 │   ├── api/                      # API routes
-│   │   ├── auth/[...all]/        # Better Auth catch-all
+│   │   ├── auth/[...all]/        # Auth endpoints
 │   │   ├── upload/presigned/     # S3 presigned URL endpoint
 │   │   ├── agreements/[id]/
 │   │   │   ├── analyze/          # Trigger analysis
@@ -99,7 +99,7 @@ src/
 
 | ID | Sub-task | Assignee | Dependencies |
 |----|----------|----------|-------------|
-| T1a | Google OAuth setup (Better Auth + provider config) | Zihan | None |
+| T1a | Auth setup (JWT + Google OAuth) | Zihan | None |
 | T1b | Login/signup pages | Ruiwu | T1a |
 | T2a | S3 presigned URL backend | Zihan | None |
 | T2b | Drag-drop upload UI + PDF parsing | Yiyang | T2a |
