@@ -11,7 +11,7 @@ interface ThreadItem {
   createdAt: string
   updatedAt: string
   owner?: {
-    email: string
+    email: string | null
     name: string | null
   }
 }

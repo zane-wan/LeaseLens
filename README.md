@@ -171,54 +171,52 @@ doc: add README with project structure
 ## Ruiwu Edits
 
 ### Edit Overview 2026.3.11
-Implemented a local auth/session + RBAC baseline for T1b, enforced per-user data isolation for uploads/agreements/chat memory, and delivered a T6 agreement results page/API surface that works with the currently completed modules.
+Implemented T1b and T6 with username-first auth, role-based permissions, per-user isolation, forgot-password and self-delete flows, merged route/component modules, and dead-code cleanup.
 
 ### Edited Scripts 2026.3.11
 - `README.md`: Added support-email environment variables and now documented this Ruiwu change log section for integration handoff.
-- `prisma/schema.prisma`: Extended the data model with `User.role`, `User.passwordHash`, support-thread/message models, and user-scoped chat/memory models.
+- `prisma/schema.prisma`: Extended the data model with RBAC/support/chat/memory entities and later updated auth fields to required `username`, optional `email`, and `PasswordResetCode`.
 - `src/app/(dashboard)/dashboard/page.tsx`: Added API error handling for fetch/analyze/delete operations while keeping the current dashboard flow.
-- `src/app/api/agreements/[id]/route.ts`: Replaced hardcoded `dev-user` logic with authenticated ownership checks before deletion.
-- `src/app/api/agreements/route.ts`: Replaced hardcoded `dev-user` logic with authenticated user-scoped create/list agreement behavior.
 - `src/app/api/upload/presigned/route.ts`: Added auth guard and changed upload key generation to user-scoped S3 paths.
 - `src/app/page.tsx`: Added auth-aware entry navigation so signed-in users go to dashboard and guests go to login/signup.
 - `src/features/upload/hooks/useUpload.ts`: Improved error propagation from backend APIs for clearer upload failure reporting.
+- `src/components/auth/LogoutButton.tsx`: Added session logout action with user identifier display.
+- `src/lib/auth.ts`: Added shared session-cookie auth helpers and normalized authenticated user shape.
+- `src/lib/password.ts`: Added password hashing/verification, strong-password validation, and reset code generation.
 
 ### Added Scripts 2026.3.11
-- `prisma/migrations/20260311190000_auth_rbac_memory/migration.sql`: Adds the database migration for RBAC, support messaging, and user-scoped chat/memory tables.
+- `prisma/migrations/20260311190000_auth_rbac_memory/migration.sql`: Adds the migration for RBAC, support messaging, and user-scoped chat/memory tables.
+- `prisma/migrations/20260312003000_username_optional_email_password_reset/migration.sql`: Adds the migration for username-first auth, optional email, and password-reset code persistence.
 - `src/app/(auth)/login/page.tsx`: Provides the login route page and redirects authenticated users to dashboard.
 - `src/app/(auth)/signup/page.tsx`: Provides the signup route page and redirects authenticated users to dashboard.
+- `src/app/(auth)/forgot-password/page.tsx`: Provides the forgot-password route page for username/email verification and code-based password reset.
 - `src/app/(dashboard)/account/page.tsx`: Hosts self-service account settings for the authenticated user.
 - `src/app/(dashboard)/admin/users/page.tsx`: Hosts protected admin/owner user-management UI.
 - `src/app/(dashboard)/agreements/[id]/page.tsx`: Implements T6 agreement analysis detail UI with status, summary cards, clause cards, and citations.
-- `src/app/(dashboard)/layout.tsx`: Adds protected dashboard shell with role-aware navigation and sign-out control.
+- `src/app/(dashboard)/layout.tsx`: Adds protected dashboard shell with role-aware navigation and username-aware sign-out label.
 - `src/app/(dashboard)/support/page.tsx`: Hosts support inbox/thread UI for user inquiries and admin/owner replies.
-- `src/app/api/admin/users/[id]/route.ts`: Implements role-constrained user update endpoint with owner/admin permission rules.
-- `src/app/api/admin/users/route.ts`: Implements admin/owner user listing endpoint.
-- `src/app/api/agreements/[id]/analyze/route.ts`: Adds a minimal secured analyze trigger that queues analysis and updates agreement status.
-- `src/app/api/agreements/[id]/status/route.ts`: Adds secured agreement + analysis status polling endpoint.
 - `src/app/api/analyses/[id]/route.ts`: Adds secured analysis detail endpoint scoped through agreement ownership.
-- `src/app/api/auth/account/route.ts`: Implements authenticated account read/update endpoint with password verification for sensitive changes.
-- `src/app/api/auth/login/route.ts`: Implements credential login and session cookie issuance.
-- `src/app/api/auth/logout/route.ts`: Implements session invalidation and cookie clearing.
-- `src/app/api/auth/me/route.ts`: Implements lightweight current-session user endpoint.
-- `src/app/api/auth/signup/route.ts`: Implements account creation with first-user owner bootstrap and session creation.
-- `src/app/api/chats/sessions/[id]/messages/route.ts`: Implements per-user chat message read/write API for isolated LLM conversation history.
-- `src/app/api/chats/sessions/route.ts`: Implements per-user chat session list/create API with optional owned-agreement binding.
-- `src/app/api/support/threads/[id]/messages/route.ts`: Implements support message read/send API with role and ownership checks.
-- `src/app/api/support/threads/route.ts`: Implements support thread list/create API with user-scoped and staff-scoped behavior.
-- `src/components/auth/LogoutButton.tsx`: Adds client-side sign-out action and redirect behavior.
-- `src/features/auth/components/AccountSettings.tsx`: Adds self-service profile/email/password update UI.
-- `src/features/auth/components/AdminUsersPanel.tsx`: Adds admin/owner role-management UI with permission-aware actions.
-- `src/features/auth/components/LoginForm.tsx`: Adds interactive credential login form for T1b.
-- `src/features/auth/components/SignupForm.tsx`: Adds interactive account registration form for T1b.
-- `src/features/support/components/SupportInbox.tsx`: Adds support thread/message UI for inquiries and responses.
-- `src/lib/auth.ts`: Adds shared session-cookie auth utilities and request/server auth helpers.
-- `src/lib/email.ts`: Adds development-safe email adapter abstraction for support/notification dispatch.
-- `src/lib/password.ts`: Adds secure password hashing and verification helpers.
+- `src/app/api/auth/[action]/route.ts`: Merges auth and account actions (`signup`, `login`, `logout`, `me`, `account`) into one throttled action router.
+- `src/app/api/auth/password-reset/[action]/route.ts`: Merges password-reset actions (`start`, `send-code`, `confirm`) into one throttled action router.
+- `src/app/api/admin/users/[[...segments]]/route.ts`: Merges admin user listing and per-user updates into one role-constrained route.
+- `src/app/api/agreements/[[...segments]]/route.ts`: Merges agreement list/create/delete plus status/analyze actions into one ownership-scoped route.
+- `src/app/api/chats/sessions/[[...segments]]/route.ts`: Merges chat session and message endpoints into one per-user isolated route.
+- `src/app/api/support/threads/[[...segments]]/route.ts`: Merges support thread and message endpoints into one role-aware route.
+- `src/features/auth/components/AuthForms.tsx`: Merges login/signup/forgot-password forms and centralizes shared form request/card logic.
+- `src/features/auth/components/AccountAdminPanels.tsx`: Merges account settings and admin user-management panels in one auth UI module.
+- `src/features/support/components/SupportInbox.tsx`: Adds support thread/message UI with nullable-email-safe rendering.
+- `src/lib/auth-service.ts`: Adds consolidated login/authority/account/password-reset business logic so auth routes stay thin.
+- `src/lib/rate-limit.ts`: Adds reusable in-memory request throttling utilities and client identifier extraction.
+- `src/lib/email.ts`: Adds independent development-safe email adapter abstraction for support and reset notifications.
 - `src/lib/rbac.ts`: Adds centralized role and account-management permission checks.
 
 ### Merge Instructions on Modules Based on T1b and T6
 All modules that depend on T1b/T6 should pull these changes and run `npm install`, `npx prisma migrate dev`, and `npx prisma generate` first so the new auth/RBAC/chat/support schema and APIs are available locally.  
-For backend integrations, stop using hardcoded user ids and require authenticated user context via the session helpers in `src/lib/auth.ts`, then enforce ownership (`where: { userId: sessionUser.id }`) on every user-owned resource, including agreements, analyses, chat sessions/messages, and future memory retrieval.  
-For T5/T6-dependent work, keep the agreement detail page contract stable by populating `Analysis` + `ClauseResult` records in the existing schema and exposing status through `/api/agreements/[id]/status`; the T6 page already renders queued/processing/failed/completed states and will automatically show richer data once T5 storage and orchestration are completed.  
-For auth/collaboration safety, preserve current role rules (`OWNER > ADMIN > USER`), do not allow admin mutation of other admins/owners, and route any new admin-only features through the same RBAC guards in `src/lib/rbac.ts` plus server-side checks in route handlers.
+For backend integrations, stop using hardcoded user ids, require authenticated session context, and enforce ownership (`where: { userId: sessionUser.id }`) on every user-owned resource, including agreements, analyses, chat sessions/messages, and future memory retrieval.  
+For T5/T6-dependent work, keep the agreement detail page contract stable by populating `Analysis` + `ClauseResult` records in the existing schema and exposing status through `/api/agreements/[id]/status`; the URL contract is unchanged after route-file merging.  
+For auth/collaboration safety, preserve current role rules (`OWNER > ADMIN > USER`), do not allow admin mutation of other admins/owners, and route any new admin-only features through centralized RBAC guards plus server-side checks in route handlers.
+For collaborators integrating auth-dependent modules, switch credential assumptions from email-login to username-login and treat email as optional profile data that may be null for active users.  
+For password-reset integrations, keep using `/api/auth/password-reset/start`, `/send-code`, and `/confirm`; these URLs are unchanged after action-route merging.  
+For account/profile and admin-user features, keep business logic in the shared auth service layer and continue using merged action routers instead of reintroducing split route files.  
+For security-sensitive endpoints, keep the existing throttle pattern and return `429` + `Retry-After` headers consistently when limits are exceeded.  
+Keep email delivery concerns isolated in the email adapter layer and avoid coupling feature logic directly to provider-specific transport code.

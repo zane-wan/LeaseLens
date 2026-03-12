@@ -1,4 +1,4 @@
-import { AccountSettings } from "@/features/auth/components/AccountSettings"
+import { AccountSettings } from "@/features/auth/components/AccountAdminPanels"
 
 export default function AccountPage() {
   return (

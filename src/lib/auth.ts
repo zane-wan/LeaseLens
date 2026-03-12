@@ -9,7 +9,8 @@ const SESSION_TTL_DAYS = 30
 
 export interface AuthUser {
   id: string
-  email: string
+  username: string
+  email: string | null
   name: string | null
   role: UserRole
 }
@@ -25,12 +26,14 @@ export class AuthError extends Error {
 
 function toAuthUser(user: {
   id: string
-  email: string
+  username: string
+  email: string | null
   name: string | null
   role: UserRole
 }): AuthUser {
   return {
     id: user.id,
+    username: user.username,
     email: user.email,
     name: user.name,
     role: user.role,
@@ -89,6 +92,7 @@ async function getAuthUserByToken(token: string): Promise<AuthUser | null> {
       user: {
         select: {
           id: true,
+          username: true,
           email: true,
           name: true,
           role: true,

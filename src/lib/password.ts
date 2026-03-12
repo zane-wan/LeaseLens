@@ -3,6 +3,22 @@ import { promisify } from "node:util"
 
 const scrypt = promisify(scryptCallback)
 const SCRYPT_KEYLEN = 64
+const MIN_PASSWORD_LENGTH = 12
+const MAX_PASSWORD_LENGTH = 64
+const COMMON_PASSWORDS = new Set([
+  "password",
+  "password123",
+  "qwerty",
+  "qwerty123",
+  "123456",
+  "12345678",
+  "letmein",
+  "welcome",
+  "admin",
+  "iloveyou",
+  "abc123",
+  "000000",
+])
 
 export async function hashPassword(password: string): Promise<string> {
   const salt = randomBytes(16).toString("hex")
@@ -19,4 +35,40 @@ export async function verifyPassword(password: string, stored: string): Promise<
   if (inputHash.length !== storedHash.length) return false
 
   return timingSafeEqual(inputHash, storedHash)
+}
+
+export function validateStrongPassword(password: string, username?: string) {
+  const errors: string[] = []
+  if (password.length < MIN_PASSWORD_LENGTH || password.length > MAX_PASSWORD_LENGTH) {
+    errors.push(`Password length must be ${MIN_PASSWORD_LENGTH}-${MAX_PASSWORD_LENGTH} characters`)
+  }
+
+  const lower = password.toLowerCase()
+  if (COMMON_PASSWORDS.has(lower)) {
+    errors.push("Password is too common")
+  }
+
+  const normalizedUsername = username?.trim().toLowerCase()
+  if (normalizedUsername && normalizedUsername.length > 2 && lower.includes(normalizedUsername)) {
+    errors.push("Password must not contain your username")
+  }
+
+  if (/(.)\1{3,}/.test(password)) {
+    errors.push("Password has repeated character patterns")
+  }
+
+  if (new Set(password).size < 6) {
+    errors.push("Password needs more character variety")
+  }
+
+  return {
+    valid: errors.length === 0,
+    errors,
+  }
+}
+
+export function generateVerificationCode(length = 6): string {
+  const max = 10 ** length
+  const num = Number.parseInt(randomBytes(4).toString("hex"), 16) % max
+  return num.toString().padStart(length, "0")
 }

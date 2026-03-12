@@ -8,7 +8,8 @@ datasource db {
 
 model User {
   id            String    @id @default(cuid())
-  email         String    @unique
+  username      String    @unique
+  email         String?   @unique
   name          String?
   image         String?
   role          UserRole  @default(USER)
@@ -25,6 +26,7 @@ model User {
   chatSessions   ChatSession[]
   chatMessages   ChatMessage[]
   memoryItems    MemoryItem[]
+  passwordResetCodes PasswordResetCode[]
 }
 
 model Account {
@@ -64,6 +66,23 @@ model Verification {
   expiresAt  DateTime
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
+}
+
+model PasswordResetCode {
+  id           String    @id @default(cuid())
+  userId       String
+  codeHash     String
+  expiresAt    DateTime
+  attemptCount Int       @default(0)
+  maxAttempts  Int       @default(5)
+  consumedAt   DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@unique([userId])
 }
 
 model Agreement {

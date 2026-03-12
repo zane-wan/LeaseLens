@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation"
-import { AdminUsersPanel } from "@/features/auth/components/AdminUsersPanel"
+import { AdminUsersPanel } from "@/features/auth/components/AccountAdminPanels"
 import { getAuthUserFromServer } from "@/lib/auth"
 
 export default async function AdminUsersPage() {
