@@ -11,6 +11,7 @@ model User {
   email         String    @unique
   name          String?
   image         String?
+  passwordHash  String?
   emailVerified Boolean   @default(false)
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
