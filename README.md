@@ -4,19 +4,21 @@ AI-powered Ontario residential lease compliance analyzer — upload a lease, get
 
 ## Tech Stack
 
-| Layer      | Technology                           |
-| ---------- | ------------------------------------ |
-| Framework  | Next.js 15 (App Router)              |
-| UI         | React 19, Tailwind CSS v4, shadcn/ui |
-| State      | Redux Toolkit                        |
-| Database   | PostgreSQL + Prisma ORM              |
-| Auth       | Better Auth + Google OAuth           |
-| AI         | Vercel AI SDK + OpenAI GPT-4o        |
-| Validation | Zod                                  |
-| Storage    | AWS S3 (lease PDFs)                  |
-| Hosting    | AWS EC2                              |
+| Layer | Technology |
+|-------|-----------|
+| Framework | Next.js 15 (App Router) |
+| UI | React 19, Tailwind CSS v4, shadcn/ui |
+| State | Redux Toolkit |
+| Database | PostgreSQL + Prisma ORM |
+| Auth | JWT + Google OAuth |
+| AI | Vercel AI SDK + OpenAI GPT-4o |
+| Validation | Zod |
+| Storage | AWS S3 (lease PDFs) |
+| Hosting | AWS EC2 |
 
-## Getting Started
+## Quick Start
+
+### 1. Clone and install
 
 ```bash
 git clone https://github.com/zane-wan/LeaseLens.git
@@ -24,14 +26,20 @@ cd LeaseLens
 npm install
 ```
 
-Create a `.env.local` file in the project root:
+### 2. Set up environment variables
+
+```bash
+cp .env.example .env.local
+```
+
+Fill in `.env.local`:
 
 ```env
 # OpenAI
 OPENAI_API_KEY=
 
-# Database
-DATABASE_URL=postgresql://user:password@localhost:5432/leaselens
+# PostgreSQL
+DATABASE_URL=postgresql://<your-username>@localhost:5432/leaselens
 
 # AWS S3
 AWS_ACCESS_KEY_ID=
@@ -39,19 +47,37 @@ AWS_SECRET_ACCESS_KEY=
 AWS_S3_BUCKET=
 AWS_REGION=
 
-# Google OAuth (Better Auth)
+# Auth
+JWT_SECRET=       # generate with: openssl rand -base64 32
 GOOGLE_CLIENT_ID=
 GOOGLE_CLIENT_SECRET=
-BETTER_AUTH_SECRET=
+NEXT_PUBLIC_APP_URL=http://localhost:3000
 ```
 
-Run the dev server:
+### 3. Set up PostgreSQL
 
 ```bash
-npm run dev
+# macOS (Homebrew)
+brew install postgresql@17
+brew services start postgresql@17
+
+# Create the database
+createdb leaselens
+```
+
+### 4. Push schema and start
+
+```bash
+npx prisma db push      # create tables
+npx prisma generate     # generate Prisma client
+npm run dev              # start dev server
 ```
 
 Open [http://localhost:3000](http://localhost:3000).
+
+### 5. Test auth API (optional)
+
+Import `postman/LeaseLens-Auth.postman_collection.json` into Postman to test signup/login/logout endpoints.
 
 ## Project Structure
 

@@ -89,10 +89,12 @@ model Agreement {
   userId     String
   fileName   String
   s3Key      String          @unique
-  s3Url      String?
-  status     AgreementStatus @default(PENDING)
-  uploadedAt DateTime        @default(now())
-  updatedAt  DateTime        @updatedAt
+  s3Url       String?
+  status      AgreementStatus @default(PENDING)
+  isGenerated Boolean         @default(false)
+  prevDoc     String?
+  uploadedAt  DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
 
   user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   analysis Analysis?
@@ -112,8 +114,10 @@ enum AgreementStatus {
 model Analysis {
   id           String         @id @default(cuid())
   agreementId  String         @unique
-  status       AnalysisStatus @default(QUEUED)
-  errorMessage String?
+  status         AnalysisStatus @default(QUEUED)
+  overallSummary String?
+  riskScore      Int?
+  errorMessage   String?
   startedAt    DateTime?
   completedAt  DateTime?
   createdAt    DateTime       @default(now())
@@ -140,6 +144,9 @@ model ClauseResult {
   explanation  String
   rtaCitations String[]
   severity     Severity?
+  issue        String?
+  legalBasis   String?
+  suggestion   String?
   createdAt    DateTime        @default(now())
 
   analysis Analysis @relation(fields: [analysisId], references: [id], onDelete: Cascade)
