@@ -30,7 +30,7 @@ async function listSessions(req: NextRequest) {
   return NextResponse.json(sessions)
 }
 
-async function createSession(req: NextRequest) {
+async function createChatSession(req: NextRequest) {
   const user = await requireAuthFromRequest(req)
   const body = await req.json()
   const parsed = sessionSchema.safeParse(body)
@@ -166,7 +166,7 @@ export async function POST(
   try {
     const { segments = [] } = await params
     if (segments.length === 0) {
-      return await createSession(req)
+      return await createChatSession(req)
     }
     if (segments.length === 2 && segments[1] === "messages") {
       return await createMessage(req, segments[0])

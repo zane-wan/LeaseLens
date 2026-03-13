@@ -36,7 +36,7 @@ export default async function DashboardLayout({
                 <Button variant="outline" size="sm">Admin</Button>
               </Link>
             ) : null}
-            <LogoutButton identifier={user.username} />
+            <LogoutButton identifier={user.email} />
           </div>
         </div>
       </header>

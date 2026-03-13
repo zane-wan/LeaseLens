@@ -10,16 +10,14 @@ async function readJsonSafely<T>(res: Response): Promise<T | null> {
 
 interface AccountUser {
   id: string
-  username: string
-  email: string | null
+  email: string
   name: string | null
   role: UserRole
 }
 
 interface AdminUser {
   id: string
-  username: string
-  email: string | null
+  email: string
   name: string | null
   role: UserRole
   emailVerified: boolean
@@ -35,7 +33,6 @@ interface MeResponse {
 
 export function AccountSettings() {
   const [user, setUser] = useState<AccountUser | null>(null)
-  const [username, setUsername] = useState("")
   const [name, setName] = useState("")
   const [email, setEmail] = useState("")
   const [currentPassword, setCurrentPassword] = useState("")
@@ -54,7 +51,6 @@ export function AccountSettings() {
       .then((json) => {
         if (!active) return
         setUser(json.user)
-        setUsername(json.user?.username ?? "")
         setName(json.user?.name ?? "")
         setEmail(json.user?.email ?? "")
       })
@@ -75,9 +71,6 @@ export function AccountSettings() {
     setMessage(null)
 
     const payload: Record<string, string> = {}
-    if (username.trim() && username.trim() !== user?.username) {
-      payload.username = username.trim()
-    }
     if (name.trim()) payload.name = name.trim()
     if (email.trim() !== (user?.email ?? "")) {
       payload.email = email.trim()
@@ -105,9 +98,8 @@ export function AccountSettings() {
     }
 
     setUser(updatedUser)
-    setUsername(updatedUser.username ?? "")
     setName(updatedUser.name ?? "")
-    setEmail(updatedUser.email ?? "")
+    setEmail(updatedUser.email)
     setCurrentPassword("")
     setNewPassword("")
     setMessage("Account updated")
@@ -151,12 +143,14 @@ export function AccountSettings() {
 
       <form onSubmit={onSubmit} className="mt-6 space-y-4">
         <div className="space-y-1">
-          <label htmlFor="username" className="text-sm font-medium">Username</label>
+          <label htmlFor="email" className="text-sm font-medium">Email</label>
           <input
-            id="username"
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
+            id="email"
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
             className="h-10 w-full rounded-md border bg-background px-3 text-sm"
+            required
           />
         </div>
 
@@ -166,17 +160,6 @@ export function AccountSettings() {
             id="name"
             value={name}
             onChange={(e) => setName(e.target.value)}
-            className="h-10 w-full rounded-md border bg-background px-3 text-sm"
-          />
-        </div>
-
-        <div className="space-y-1">
-          <label htmlFor="email" className="text-sm font-medium">Email (optional)</label>
-          <input
-            id="email"
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
             className="h-10 w-full rounded-md border bg-background px-3 text-sm"
           />
         </div>
@@ -228,8 +211,10 @@ export function AccountSettings() {
             value={deletePassword}
             onChange={(e) => setDeletePassword(e.target.value)}
             className="h-10 w-full rounded-md border bg-background px-3 text-sm"
-            required
           />
+          <p className="text-xs text-muted-foreground">
+            Required for password-based accounts; optional for Google-only accounts.
+          </p>
         </div>
         <div className="space-y-1">
           <label htmlFor="delete-confirm" className="text-sm font-medium">Type DELETE to confirm</label>
@@ -313,9 +298,7 @@ export function AdminUsersPanel() {
           <div key={u.id} className="grid grid-cols-1 gap-3 rounded-lg border p-3 md:grid-cols-5 md:items-center">
             <div className="md:col-span-2">
               <p className="text-sm font-medium">{u.name ?? "Unnamed user"}</p>
-              <p className="text-xs text-muted-foreground">
-                @{u.username} {u.email ? `• ${u.email}` : "• no email attached"}
-              </p>
+              <p className="text-xs text-muted-foreground">{u.email}</p>
             </div>
             <p className="text-xs text-muted-foreground">{u.emailVerified ? "Verified" : "Unverified"}</p>
             <p className="text-xs text-muted-foreground">Current: {u.role}</p>

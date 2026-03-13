@@ -3,23 +3,22 @@ import { z } from "zod"
 import {
   AuthServiceError,
   confirmPasswordReset,
-  normalizeUsername,
+  normalizeEmail,
   sendPasswordResetCode,
   startPasswordReset,
 } from "@/lib/auth-service"
 import { consumeRateLimit, getClientIdentifier } from "@/lib/rate-limit"
 
 const startSchema = z.object({
-  username: z.string().trim().min(1),
+  email: z.string().email().trim().toLowerCase(),
 })
 
 const sendCodeSchema = z.object({
-  username: z.string().trim().min(1),
   email: z.string().email().trim().toLowerCase(),
 })
 
 const confirmSchema = z.object({
-  username: z.string().trim().min(1),
+  email: z.string().email().trim().toLowerCase(),
   code: z.string().trim().min(4).max(12),
   newPassword: z.string().min(1),
 })
@@ -38,10 +37,10 @@ export async function POST(
         return NextResponse.json({ error: "Invalid payload" }, { status: 400 })
       }
 
-      const username = normalizeUsername(parsed.data.username)
+      const email = normalizeEmail(parsed.data.email)
       const clientId = getClientIdentifier(req.headers)
       const limit = consumeRateLimit(
-        `password-reset-start:${clientId}:${username}`,
+        `password-reset-start:${clientId}:${email}`,
         8,
         15 * 60 * 1000
       )
@@ -52,7 +51,7 @@ export async function POST(
         )
       }
 
-      const result = await startPasswordReset(username)
+      const result = await startPasswordReset(email)
       return NextResponse.json(result)
     } catch (err) {
       if (err instanceof AuthServiceError) {
@@ -70,10 +69,10 @@ export async function POST(
         return NextResponse.json({ error: "Invalid payload" }, { status: 400 })
       }
 
-      const username = normalizeUsername(parsed.data.username)
+      const email = normalizeEmail(parsed.data.email)
       const clientId = getClientIdentifier(req.headers)
       const limit = consumeRateLimit(
-        `password-reset-send:${clientId}:${username}`,
+        `password-reset-send:${clientId}:${email}`,
         5,
         15 * 60 * 1000
       )
@@ -84,7 +83,7 @@ export async function POST(
         )
       }
 
-      const result = await sendPasswordResetCode(username, parsed.data.email)
+      const result = await sendPasswordResetCode(email)
       return NextResponse.json(result)
     } catch (err) {
       if (err instanceof AuthServiceError) {
@@ -102,10 +101,10 @@ export async function POST(
         return NextResponse.json({ error: "Invalid payload" }, { status: 400 })
       }
 
-      const username = normalizeUsername(parsed.data.username)
+      const email = normalizeEmail(parsed.data.email)
       const clientId = getClientIdentifier(req.headers)
       const limit = consumeRateLimit(
-        `password-reset-confirm:${clientId}:${username}`,
+        `password-reset-confirm:${clientId}:${email}`,
         10,
         15 * 60 * 1000
       )
@@ -117,7 +116,7 @@ export async function POST(
       }
 
       const result = await confirmPasswordReset(
-        username,
+        email,
         parsed.data.code,
         parsed.data.newPassword
       )

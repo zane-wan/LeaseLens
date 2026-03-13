@@ -1,18 +1,22 @@
-import { randomBytes } from "node:crypto"
 import { cookies } from "next/headers"
 import { NextRequest, NextResponse } from "next/server"
+import { jwtVerify, SignJWT } from "jose"
 import { UserRole } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
 
-export const SESSION_COOKIE_NAME = "leaselens_session"
-const SESSION_TTL_DAYS = 30
+export const SESSION_COOKIE_NAME = "token"
+const SESSION_TTL_SECONDS = 7 * 24 * 60 * 60
 
 export interface AuthUser {
   id: string
-  username: string
-  email: string | null
+  email: string
   name: string | null
   role: UserRole
+}
+
+type TokenPayload = {
+  userId: string
+  email: string
 }
 
 export class AuthError extends Error {
@@ -24,39 +28,47 @@ export class AuthError extends Error {
   }
 }
 
-function toAuthUser(user: {
-  id: string
-  username: string
-  email: string | null
-  name: string | null
-  role: UserRole
-}): AuthUser {
-  return {
-    id: user.id,
-    username: user.username,
-    email: user.email,
-    name: user.name,
-    role: user.role,
+function getJwtSecret() {
+  const secret = process.env.JWT_SECRET ?? process.env.BETTER_AUTH_SECRET
+  if (!secret) {
+    throw new Error("JWT_SECRET or BETTER_AUTH_SECRET environment variable must be set")
   }
+  return new TextEncoder().encode(secret)
 }
 
 function makeSessionExpiry() {
-  return new Date(Date.now() + SESSION_TTL_DAYS * 24 * 60 * 60 * 1000)
+  return new Date(Date.now() + SESSION_TTL_SECONDS * 1000)
 }
 
-export async function createSession(userId: string, req?: NextRequest) {
-  const token = randomBytes(32).toString("hex")
-  const expiresAt = makeSessionExpiry()
+async function signToken(payload: TokenPayload): Promise<string> {
+  return new SignJWT(payload)
+    .setProtectedHeader({ alg: "HS256" })
+    .setIssuedAt()
+    .setExpirationTime("7d")
+    .sign(getJwtSecret())
+}
 
-  await prisma.session.create({
-    data: {
-      userId,
-      token,
-      expiresAt,
-      ipAddress: req?.headers.get("x-forwarded-for") ?? null,
-      userAgent: req?.headers.get("user-agent") ?? null,
-    },
+async function verifyToken(token: string): Promise<TokenPayload | null> {
+  try {
+    const { payload } = await jwtVerify(token, getJwtSecret())
+    return payload as unknown as TokenPayload
+  } catch {
+    return null
+  }
+}
+
+export async function createSession(userId: string, _req?: NextRequest) {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { id: true, email: true },
   })
+
+  if (!user) {
+    throw new AuthError("User not found", 404)
+  }
+
+  const token = await signToken({ userId: user.id, email: user.email })
+  const expiresAt = makeSessionExpiry()
 
   return { token, expiresAt }
 }
@@ -69,6 +81,7 @@ export function attachSessionCookie(res: NextResponse, token: string, expiresAt:
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax",
     path: "/",
+    maxAge: SESSION_TTL_SECONDS,
     expires: expiresAt,
   })
 }
@@ -86,28 +99,22 @@ export function clearSessionCookie(res: NextResponse) {
 }
 
 async function getAuthUserByToken(token: string): Promise<AuthUser | null> {
-  const session = await prisma.session.findUnique({
-    where: { token },
-    include: {
-      user: {
-        select: {
-          id: true,
-          username: true,
-          email: true,
-          name: true,
-          role: true,
-        },
-      },
+  const payload = await verifyToken(token)
+  if (!payload) return null
+
+  const user = await prisma.user.findUnique({
+    where: { id: payload.userId },
+    select: {
+      id: true,
+      email: true,
+      name: true,
+      role: true,
     },
   })
 
-  if (!session) return null
-  if (session.expiresAt < new Date()) {
-    await prisma.session.delete({ where: { id: session.id } })
-    return null
-  }
+  if (!user) return null
 
-  return toAuthUser(session.user)
+  return user
 }
 
 export async function getAuthUserFromRequest(req: NextRequest): Promise<AuthUser | null> {
@@ -131,8 +138,6 @@ export async function requireAuthFromRequest(req: NextRequest): Promise<AuthUser
   return user
 }
 
-export async function destroySessionByRequest(req: NextRequest) {
-  const token = req.cookies.get(SESSION_COOKIE_NAME)?.value
-  if (!token) return
-  await prisma.session.deleteMany({ where: { token } })
+export async function destroySessionByRequest(_req: NextRequest) {
+  // JWT cookie is stateless; clearing cookie on response is sufficient.
 }

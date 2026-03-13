@@ -16,26 +16,23 @@ export class AuthServiceError extends Error {
 
 type PublicUser = {
   id: string
-  username: string
-  email: string | null
+  email: string
   name: string | null
   role: UserRole
 }
 
 type SignupInput = {
-  username: string
+  email: string
   password: string
-  email?: string
   name?: string
 }
 
 type LoginInput = {
-  username: string
+  email: string
   password: string
 }
 
 type AccountUpdateInput = {
-  username?: string
   name?: string
   email?: string
   currentPassword?: string
@@ -45,8 +42,8 @@ type AccountUpdateInput = {
 const PASSWORD_RESET_EXPIRY_MINUTES = 15
 const PASSWORD_RESET_MAX_ATTEMPTS = 5
 
-export function normalizeUsername(username: string): string {
-  return username.trim().toLowerCase()
+export function normalizeEmail(email: string): string {
+  return email.trim().toLowerCase()
 }
 
 function maskEmail(email: string): string {
@@ -55,11 +52,8 @@ function maskEmail(email: string): string {
   return `${prefix}***@${domain}`
 }
 
-async function ensureUniqueUsername(username: string, exceptUserId?: string) {
-  const existing = await prisma.user.findUnique({ where: { username } })
-  if (existing && existing.id !== exceptUserId) {
-    throw new AuthServiceError("Username is already taken", 409)
-  }
+function passwordIdentityFromEmail(email: string): string {
+  return normalizeEmail(email).split("@")[0] ?? ""
 }
 
 async function ensureUniqueEmail(email: string, exceptUserId?: string) {
@@ -69,20 +63,21 @@ async function ensureUniqueEmail(email: string, exceptUserId?: string) {
   }
 }
 
-function validatePasswordOrThrow(password: string, username: string) {
-  const check = validateStrongPassword(password, username)
+function validatePasswordOrThrow(password: string, email: string) {
+  const check = validateStrongPassword(password, passwordIdentityFromEmail(email))
   if (!check.valid) {
     throw new AuthServiceError(check.errors[0], 400)
   }
 }
 
 export async function signupWithPassword(input: SignupInput, req: NextRequest) {
-  const username = normalizeUsername(input.username)
-  const email = input.email?.trim().toLowerCase() || null
+  const email = normalizeEmail(input.email)
+  if (!email) {
+    throw new AuthServiceError("Email is required", 400)
+  }
 
-  await ensureUniqueUsername(username)
-  if (email) await ensureUniqueEmail(email)
-  validatePasswordOrThrow(input.password, username)
+  await ensureUniqueEmail(email)
+  validatePasswordOrThrow(input.password, email)
 
   const passwordHash = await hashPassword(input.password)
   const userCount = await prisma.user.count()
@@ -90,7 +85,6 @@ export async function signupWithPassword(input: SignupInput, req: NextRequest) {
 
   const user = await prisma.user.create({
     data: {
-      username,
       email,
       name: input.name ?? null,
       role,
@@ -98,7 +92,6 @@ export async function signupWithPassword(input: SignupInput, req: NextRequest) {
     },
     select: {
       id: true,
-      username: true,
       email: true,
       name: true,
       role: true,
@@ -110,31 +103,30 @@ export async function signupWithPassword(input: SignupInput, req: NextRequest) {
 }
 
 export async function loginWithPassword(input: LoginInput, req: NextRequest) {
-  const username = normalizeUsername(input.username)
+  const email = normalizeEmail(input.email)
   const user = await prisma.user.findUnique({
-    where: { username },
+    where: { email },
     select: {
       id: true,
-      username: true,
       email: true,
       name: true,
       role: true,
       passwordHash: true,
     },
   })
+
   if (!user?.passwordHash) {
-    throw new AuthServiceError("Invalid credentials", 401)
+    throw new AuthServiceError("Invalid email or password", 401)
   }
 
   const ok = await verifyPassword(input.password, user.passwordHash)
   if (!ok) {
-    throw new AuthServiceError("Invalid credentials", 401)
+    throw new AuthServiceError("Invalid email or password", 401)
   }
 
   const session = await createSession(user.id, req)
   const publicUser: PublicUser = {
     id: user.id,
-    username: user.username,
     email: user.email,
     name: user.name,
     role: user.role,
@@ -147,7 +139,7 @@ export async function updateOwnAccount(userId: string, input: AccountUpdateInput
     where: { id: userId },
     select: {
       id: true,
-      username: true,
+      email: true,
       passwordHash: true,
     },
   })
@@ -155,16 +147,17 @@ export async function updateOwnAccount(userId: string, input: AccountUpdateInput
     throw new AuthServiceError("User not found", 404)
   }
 
-  const normalizedUsername = input.username ? normalizeUsername(input.username) : undefined
   const normalizedEmail = input.email === undefined
     ? undefined
-    : input.email.trim() === ""
-      ? null
-      : input.email.trim().toLowerCase()
+    : normalizeEmail(input.email)
 
-  const hasSensitiveUpdates = Boolean(normalizedUsername || normalizedEmail !== undefined || input.newPassword)
-  if (hasSensitiveUpdates) {
-    if (!input.currentPassword || !target.passwordHash) {
+  if (normalizedEmail !== undefined && !normalizedEmail) {
+    throw new AuthServiceError("Email is required", 400)
+  }
+
+  const hasSensitiveUpdates = Boolean(normalizedEmail !== undefined || input.newPassword)
+  if (hasSensitiveUpdates && target.passwordHash) {
+    if (!input.currentPassword) {
       throw new AuthServiceError("Current password is required", 400)
     }
     const valid = await verifyPassword(input.currentPassword, target.passwordHash)
@@ -173,15 +166,12 @@ export async function updateOwnAccount(userId: string, input: AccountUpdateInput
     }
   }
 
-  if (normalizedUsername) {
-    await ensureUniqueUsername(normalizedUsername, userId)
-  }
-  if (normalizedEmail) {
+  if (normalizedEmail && normalizedEmail !== target.email) {
     await ensureUniqueEmail(normalizedEmail, userId)
   }
 
   if (input.newPassword) {
-    validatePasswordOrThrow(input.newPassword, normalizedUsername ?? target.username)
+    validatePasswordOrThrow(input.newPassword, normalizedEmail ?? target.email)
   }
 
   const nextPasswordHash = input.newPassword
@@ -191,15 +181,16 @@ export async function updateOwnAccount(userId: string, input: AccountUpdateInput
   const updated = await prisma.user.update({
     where: { id: userId },
     data: {
-      username: normalizedUsername,
       name: input.name,
       email: normalizedEmail,
       passwordHash: nextPasswordHash,
-      emailVerified: normalizedEmail === undefined ? undefined : false,
+      emailVerified:
+        normalizedEmail === undefined || normalizedEmail === target.email
+          ? undefined
+          : false,
     },
     select: {
       id: true,
-      username: true,
       email: true,
       name: true,
       role: true,
@@ -209,7 +200,7 @@ export async function updateOwnAccount(userId: string, input: AccountUpdateInput
   return updated
 }
 
-export async function deleteOwnAccount(userId: string, currentPassword: string) {
+export async function deleteOwnAccount(userId: string, currentPassword?: string) {
   const target = await prisma.user.findUnique({
     where: { id: userId },
     select: {
@@ -218,13 +209,18 @@ export async function deleteOwnAccount(userId: string, currentPassword: string) 
       passwordHash: true,
     },
   })
-  if (!target || !target.passwordHash) {
+  if (!target) {
     throw new AuthServiceError("User not found", 404)
   }
 
-  const valid = await verifyPassword(currentPassword, target.passwordHash)
-  if (!valid) {
-    throw new AuthServiceError("Current password is incorrect", 403)
+  if (target.passwordHash) {
+    if (!currentPassword) {
+      throw new AuthServiceError("Current password is required", 400)
+    }
+    const valid = await verifyPassword(currentPassword, target.passwordHash)
+    if (!valid) {
+      throw new AuthServiceError("Current password is incorrect", 403)
+    }
   }
 
   if (target.role === "OWNER") {
@@ -237,40 +233,31 @@ export async function deleteOwnAccount(userId: string, currentPassword: string) 
   await prisma.user.delete({ where: { id: userId } })
 }
 
-export async function startPasswordReset(usernameInput: string) {
-  const username = normalizeUsername(usernameInput)
+export async function startPasswordReset(emailInput: string) {
+  const email = normalizeEmail(emailInput)
   const user = await prisma.user.findUnique({
-    where: { username },
-    select: { username: true, email: true },
+    where: { email },
+    select: { email: true },
   })
+
   if (!user) {
-    throw new AuthServiceError("Username not found", 404)
-  }
-  if (!user.email) {
-    throw new AuthServiceError("No email is attached to this account, so password reset is unavailable", 400)
+    throw new AuthServiceError("Email not found", 404)
   }
 
   return {
-    username: user.username,
     emailHint: maskEmail(user.email),
   }
 }
 
-export async function sendPasswordResetCode(usernameInput: string, typedEmail: string) {
-  const username = normalizeUsername(usernameInput)
-  const email = typedEmail.trim().toLowerCase()
+export async function sendPasswordResetCode(emailInput: string) {
+  const email = normalizeEmail(emailInput)
   const user = await prisma.user.findUnique({
-    where: { username },
+    where: { email },
     select: { id: true, email: true },
   })
+
   if (!user) {
-    throw new AuthServiceError("Username not found", 404)
-  }
-  if (!user.email) {
-    throw new AuthServiceError("No email is attached to this account, so password reset is unavailable", 400)
-  }
-  if (user.email.toLowerCase() !== email) {
-    throw new AuthServiceError("Typed email does not match this account", 403)
+    throw new AuthServiceError("Email not found", 404)
   }
 
   const code = generateVerificationCode(6)
@@ -309,16 +296,16 @@ export async function sendPasswordResetCode(usernameInput: string, typedEmail: s
 }
 
 export async function confirmPasswordReset(
-  usernameInput: string,
+  emailInput: string,
   code: string,
   newPassword: string
 ) {
-  const username = normalizeUsername(usernameInput)
+  const email = normalizeEmail(emailInput)
   const user = await prisma.user.findUnique({
-    where: { username },
+    where: { email },
     select: {
       id: true,
-      username: true,
+      email: true,
       passwordResetCodes: { take: 1 },
     },
   })
@@ -347,7 +334,7 @@ export async function confirmPasswordReset(
     throw new AuthServiceError("Invalid verification code", 403)
   }
 
-  validatePasswordOrThrow(newPassword, user.username)
+  validatePasswordOrThrow(newPassword, user.email)
   const nextPasswordHash = await hashPassword(newPassword)
 
   await prisma.$transaction([

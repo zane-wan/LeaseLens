@@ -7,15 +7,8 @@ import { prisma } from "@/lib/prisma"
 import { canAssignRole, canManageAccount, isAdminLike } from "@/lib/rbac"
 
 const updateSchema = z.object({
-  username: z
-    .string()
-    .trim()
-    .min(3)
-    .max(32)
-    .regex(/^[a-zA-Z0-9._-]+$/)
-    .optional(),
   name: z.string().trim().min(1).max(80).optional(),
-  email: z.union([z.string().email().trim().toLowerCase(), z.literal("")]).optional(),
+  email: z.string().email().trim().toLowerCase().optional(),
   role: z.enum(["OWNER", "ADMIN", "USER"]).optional(),
   password: z.string().min(1).optional(),
 })
@@ -34,7 +27,6 @@ async function listUsers(req: NextRequest) {
     orderBy: { createdAt: "asc" },
     select: {
       id: true,
-      username: true,
       email: true,
       name: true,
       role: true,
@@ -62,7 +54,7 @@ async function updateUser(req: NextRequest, id: string) {
     where: { id },
     select: {
       id: true,
-      username: true,
+      email: true,
       role: true,
     },
   })
@@ -75,7 +67,6 @@ async function updateUser(req: NextRequest, id: string) {
   }
 
   const updates = parsed.data
-  const normalizedUsername = updates.username?.toLowerCase()
   if (updates.role && !canAssignRole(actor.role, updates.role as UserRole)) {
     return NextResponse.json({ error: "Forbidden role assignment" }, { status: 403 })
   }
@@ -87,19 +78,7 @@ async function updateUser(req: NextRequest, id: string) {
     }
   }
 
-  if (normalizedUsername) {
-    const existing = await prisma.user.findUnique({ where: { username: normalizedUsername } })
-    if (existing && existing.id !== target.id) {
-      return NextResponse.json({ error: "Username is already taken" }, { status: 409 })
-    }
-  }
-
-  const normalizedEmail = updates.email === undefined
-    ? undefined
-    : updates.email === ""
-      ? null
-      : updates.email
-
+  const normalizedEmail = updates.email
   if (normalizedEmail) {
     const existing = await prisma.user.findUnique({ where: { email: normalizedEmail } })
     if (existing && existing.id !== target.id) {
@@ -108,8 +87,7 @@ async function updateUser(req: NextRequest, id: string) {
   }
 
   if (updates.password) {
-    const nextUsername = normalizedUsername ?? target.username
-    const check = validateStrongPassword(updates.password, nextUsername)
+    const check = validateStrongPassword(updates.password, target.email.split("@")[0])
     if (!check.valid) {
       return NextResponse.json({ error: check.errors[0] }, { status: 400 })
     }
@@ -122,16 +100,17 @@ async function updateUser(req: NextRequest, id: string) {
   const user = await prisma.user.update({
     where: { id: target.id },
     data: {
-      username: normalizedUsername,
       name: updates.name,
       email: normalizedEmail,
       role: updates.role,
       passwordHash: nextPasswordHash,
-      emailVerified: normalizedEmail === undefined ? undefined : false,
+      emailVerified:
+        normalizedEmail === undefined || normalizedEmail === target.email
+          ? undefined
+          : false,
     },
     select: {
       id: true,
-      username: true,
       email: true,
       name: true,
       role: true,

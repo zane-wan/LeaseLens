@@ -37,7 +37,7 @@ export async function verifyPassword(password: string, stored: string): Promise<
   return timingSafeEqual(inputHash, storedHash)
 }
 
-export function validateStrongPassword(password: string, username?: string) {
+export function validateStrongPassword(password: string, identityHint?: string) {
   const errors: string[] = []
   if (password.length < MIN_PASSWORD_LENGTH || password.length > MAX_PASSWORD_LENGTH) {
     errors.push(`Password length must be ${MIN_PASSWORD_LENGTH}-${MAX_PASSWORD_LENGTH} characters`)
@@ -48,9 +48,9 @@ export function validateStrongPassword(password: string, username?: string) {
     errors.push("Password is too common")
   }
 
-  const normalizedUsername = username?.trim().toLowerCase()
-  if (normalizedUsername && normalizedUsername.length > 2 && lower.includes(normalizedUsername)) {
-    errors.push("Password must not contain your username")
+  const normalizedIdentity = identityHint?.trim().toLowerCase()
+  if (normalizedIdentity && normalizedIdentity.length > 2 && lower.includes(normalizedIdentity)) {
+    errors.push("Password must not contain your account identifier")
   }
 
   if (/(.)\1{3,}/.test(password)) {

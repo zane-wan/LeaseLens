@@ -11,11 +11,41 @@ type LimitResult = {
 
 const globalRateStore = globalThis as unknown as {
   rateLimiterBuckets?: Map<string, Bucket>
+  lastRateLimiterCleanupAt?: number
 }
 
 const buckets = globalRateStore.rateLimiterBuckets ?? new Map<string, Bucket>()
 if (!globalRateStore.rateLimiterBuckets) {
   globalRateStore.rateLimiterBuckets = buckets
+}
+
+const CLEANUP_INTERVAL_MS = 60 * 1000
+const MAX_BUCKETS = 10_000
+
+function cleanupBuckets(now: number) {
+  const lastCleanup = globalRateStore.lastRateLimiterCleanupAt ?? 0
+  if (now - lastCleanup < CLEANUP_INTERVAL_MS && buckets.size <= MAX_BUCKETS) {
+    return
+  }
+
+  for (const [bucketKey, bucket] of buckets) {
+    if (bucket.resetAt <= now) {
+      buckets.delete(bucketKey)
+    }
+  }
+
+  if (buckets.size > MAX_BUCKETS) {
+    const overflow = buckets.size - MAX_BUCKETS
+    const oldest = [...buckets.entries()]
+      .sort((a, b) => a[1].resetAt - b[1].resetAt)
+      .slice(0, overflow)
+
+    for (const [bucketKey] of oldest) {
+      buckets.delete(bucketKey)
+    }
+  }
+
+  globalRateStore.lastRateLimiterCleanupAt = now
 }
 
 export function consumeRateLimit(
@@ -24,6 +54,7 @@ export function consumeRateLimit(
   windowMs: number
 ): LimitResult {
   const now = Date.now()
+  cleanupBuckets(now)
   const existing = buckets.get(key)
 
   if (!existing || existing.resetAt <= now) {

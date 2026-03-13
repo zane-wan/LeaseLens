@@ -12,45 +12,32 @@ import {
   AuthServiceError,
   deleteOwnAccount,
   loginWithPassword,
-  normalizeUsername,
+  normalizeEmail,
   signupWithPassword,
   updateOwnAccount,
 } from "@/lib/auth-service"
 import { consumeRateLimit, getClientIdentifier } from "@/lib/rate-limit"
 
 const signupSchema = z.object({
-  username: z
-    .string()
-    .trim()
-    .min(3)
-    .max(32)
-    .regex(/^[a-zA-Z0-9._-]+$/),
-  email: z.string().email().trim().toLowerCase().optional(),
+  email: z.string().email().trim().toLowerCase(),
   password: z.string().min(1),
   name: z.string().trim().min(1).max(80).optional(),
 })
 
 const loginSchema = z.object({
-  username: z.string().trim().min(1),
+  email: z.string().email().trim().toLowerCase(),
   password: z.string().min(1),
 })
 
 const updateSchema = z.object({
-  username: z
-    .string()
-    .trim()
-    .min(3)
-    .max(32)
-    .regex(/^[a-zA-Z0-9._-]+$/)
-    .optional(),
   name: z.string().trim().min(1).max(80).optional(),
-  email: z.union([z.string().email().trim().toLowerCase(), z.literal("")]).optional(),
+  email: z.string().email().trim().toLowerCase().optional(),
   currentPassword: z.string().min(1).optional(),
   newPassword: z.string().min(1).optional(),
 })
 
 const deleteSchema = z.object({
-  currentPassword: z.string().min(1),
+  currentPassword: z.string().min(1).optional(),
   confirmation: z.literal("DELETE"),
 })
 
@@ -99,10 +86,10 @@ export async function POST(
         return NextResponse.json({ error: "Invalid signup payload" }, { status: 400 })
       }
 
-      const normalizedUsername = normalizeUsername(parsed.data.username)
+      const normalizedEmail = normalizeEmail(parsed.data.email)
       const clientId = getClientIdentifier(req.headers)
       const limit = consumeRateLimit(
-        `signup:${clientId}:${normalizedUsername}`,
+        `signup:${clientId}:${normalizedEmail}`,
         5,
         15 * 60 * 1000
       )
@@ -133,10 +120,10 @@ export async function POST(
         return NextResponse.json({ error: "Invalid login payload" }, { status: 400 })
       }
 
-      const normalizedUsername = normalizeUsername(parsed.data.username)
+      const normalizedEmail = normalizeEmail(parsed.data.email)
       const clientId = getClientIdentifier(req.headers)
       const limit = consumeRateLimit(
-        `login:${clientId}:${normalizedUsername}`,
+        `login:${clientId}:${normalizedEmail}`,
         10,
         10 * 60 * 1000
       )
@@ -180,7 +167,7 @@ export async function PATCH(
     }
 
     const data = parsed.data
-    if (!data.username && !data.name && data.email === undefined && !data.newPassword) {
+    if (!data.name && data.email === undefined && !data.newPassword) {
       return NextResponse.json({ error: "No updates requested" }, { status: 400 })
     }
 
@@ -198,7 +185,6 @@ export async function PATCH(
     }
 
     const updated = await updateOwnAccount(actor.id, {
-      username: data.username,
       name: data.name,
       email: data.email,
       currentPassword: data.currentPassword,

@@ -37,7 +37,7 @@ function AuthCard({
 
 export function LoginForm() {
   const router = useRouter()
-  const [username, setUsername] = useState("")
+  const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -47,7 +47,7 @@ export function LoginForm() {
     setError(null)
     setLoading(true)
 
-    const { res, json } = await postJson("/api/auth/login", { username, password })
+    const { res, json } = await postJson("/api/auth/login", { email, password })
     setLoading(false)
 
     if (!res.ok) {
@@ -63,13 +63,14 @@ export function LoginForm() {
     <AuthCard title="Sign in" subtitle="Access your LeaseLens workspace">
       <form onSubmit={onSubmit} className="space-y-4">
         <div className="space-y-1">
-          <label htmlFor="username" className="text-sm font-medium">Username</label>
+          <label htmlFor="email" className="text-sm font-medium">Email</label>
           <input
-            id="username"
-            autoComplete="username"
+            id="email"
+            type="email"
+            autoComplete="email"
             required
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
             className="h-10 w-full rounded-md border bg-background px-3 text-sm"
           />
         </div>
@@ -92,9 +93,16 @@ export function LoginForm() {
         </Button>
       </form>
 
-      <p className="mt-3 text-sm">
+      <div className="my-4 h-px w-full bg-border" />
+      <a href="/api/auth/google" className="block">
+        <Button type="button" variant="outline" className="w-full">
+          Continue with Google
+        </Button>
+      </a>
+
+      <p className="mt-4 text-sm">
         <Link href="/forgot-password" className="underline text-muted-foreground">
-          Forget about password?
+          Forgot password?
         </Link>
       </p>
 
@@ -110,7 +118,6 @@ export function LoginForm() {
 
 export function SignupForm() {
   const router = useRouter()
-  const [username, setUsername] = useState("")
   const [name, setName] = useState("")
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
@@ -123,9 +130,8 @@ export function SignupForm() {
     setLoading(true)
 
     const { res, json } = await postJson("/api/auth/signup", {
-      username,
       name: name || undefined,
-      email: email || undefined,
+      email,
       password,
     })
     setLoading(false)
@@ -143,17 +149,6 @@ export function SignupForm() {
     <AuthCard title="Create account" subtitle="Start analyzing your agreements">
       <form onSubmit={onSubmit} className="space-y-4">
         <div className="space-y-1">
-          <label htmlFor="username" className="text-sm font-medium">Username</label>
-          <input
-            id="username"
-            autoComplete="username"
-            required
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
-            className="h-10 w-full rounded-md border bg-background px-3 text-sm"
-          />
-        </div>
-        <div className="space-y-1">
           <label htmlFor="name" className="text-sm font-medium">Display name (optional)</label>
           <input
             id="name"
@@ -164,11 +159,12 @@ export function SignupForm() {
           />
         </div>
         <div className="space-y-1">
-          <label htmlFor="email" className="text-sm font-medium">Email (optional)</label>
+          <label htmlFor="email" className="text-sm font-medium">Email</label>
           <input
             id="email"
             type="email"
             autoComplete="email"
+            required
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             className="h-10 w-full rounded-md border bg-background px-3 text-sm"
@@ -208,9 +204,8 @@ export function SignupForm() {
 }
 
 export function ForgotPasswordForm() {
-  const [username, setUsername] = useState("")
-  const [emailHint, setEmailHint] = useState<string | null>(null)
   const [email, setEmail] = useState("")
+  const [emailHint, setEmailHint] = useState<string | null>(null)
   const [code, setCode] = useState("")
   const [newPassword, setNewPassword] = useState("")
   const [loading, setLoading] = useState(false)
@@ -223,7 +218,7 @@ export function ForgotPasswordForm() {
     setError(null)
     setMessage(null)
 
-    const { res, json } = await postJson("/api/auth/password-reset/start", { username })
+    const { res, json } = await postJson("/api/auth/password-reset/start", { email })
     setLoading(false)
     if (!res.ok) {
       setError(json?.error ?? "Failed to start password reset")
@@ -238,14 +233,14 @@ export function ForgotPasswordForm() {
     setError(null)
     setMessage(null)
 
-    const { res, json } = await postJson("/api/auth/password-reset/send-code", { username, email })
+    const { res, json } = await postJson("/api/auth/password-reset/send-code", { email })
     setLoading(false)
 
     if (!res.ok) {
       setError(json?.error ?? "Failed to send code")
       return
     }
-    setMessage("Verification code sent to your attached email")
+    setMessage("Verification code sent to your email")
   }
 
   async function confirmReset(e: FormEvent<HTMLFormElement>) {
@@ -255,7 +250,7 @@ export function ForgotPasswordForm() {
     setMessage(null)
 
     const { res, json } = await postJson("/api/auth/password-reset/confirm", {
-      username,
+      email,
       code,
       newPassword,
     })
@@ -269,36 +264,30 @@ export function ForgotPasswordForm() {
   }
 
   return (
-    <AuthCard title="Reset password" subtitle="Username is required, and this account must have an attached email.">
+    <AuthCard title="Reset password" subtitle="Use your account email to receive a verification code.">
       <form onSubmit={startFlow} className="space-y-2">
-        <label htmlFor="username" className="text-sm font-medium">Username</label>
+        <label htmlFor="email" className="text-sm font-medium">Email</label>
         <input
-          id="username"
-          value={username}
-          onChange={(e) => setUsername(e.target.value)}
-          autoComplete="username"
+          id="email"
+          type="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          autoComplete="email"
           required
           className="h-10 w-full rounded-md border bg-background px-3 text-sm"
         />
-        <Button type="submit" disabled={loading || !username.trim()}>
+        <Button type="submit" disabled={loading || !email.trim()}>
           {loading ? "Checking..." : "Continue"}
         </Button>
       </form>
 
       {emailHint ? (
         <div className="mt-6 rounded-lg border p-4">
-          <p className="text-sm font-medium">Confirm attached email</p>
+          <p className="text-sm font-medium">Send verification code</p>
           <p className="text-xs text-muted-foreground">
-            Type full email matching hint: <span className="font-mono">{emailHint}</span>
+            Account found: <span className="font-mono">{emailHint}</span>
           </p>
-          <form onSubmit={sendCode} className="mt-3 space-y-2">
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-              className="h-10 w-full rounded-md border bg-background px-3 text-sm"
-            />
+          <form onSubmit={sendCode} className="mt-3">
             <Button type="submit" disabled={loading || !email.trim()}>
               {loading ? "Sending..." : "Send verification code"}
             </Button>
