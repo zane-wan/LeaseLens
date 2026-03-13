@@ -51,6 +51,7 @@ AWS_REGION=
 JWT_SECRET=       # generate with: openssl rand -base64 32
 GOOGLE_CLIENT_ID=
 GOOGLE_CLIENT_SECRET=
+NEXT_PUBLIC_APP_URL=http://localhost:3000
 ```
 
 ### 3. Set up PostgreSQL
@@ -91,7 +92,13 @@ src/
 │   │   ├── upload/               # Lease upload page
 │   │   └── agreements/[id]/      # Single agreement detail
 │   ├── api/                      # API routes
-│   │   ├── auth/[...all]/        # Auth endpoints
+│   │   ├── auth/
+│   │   │   ├── signup/           # Email/password signup
+│   │   │   ├── login/            # Email/password login
+│   │   │   ├── logout/           # Clear auth cookie
+│   │   │   ├── me/               # Get current user session
+│   │   │   └── google/           # Google OAuth
+│   │   │       └── callback/     # Google OAuth callback
 │   │   ├── upload/presigned/     # S3 presigned URL endpoint
 │   │   ├── agreements/[id]/
 │   │   │   ├── analyze/          # Trigger analysis
