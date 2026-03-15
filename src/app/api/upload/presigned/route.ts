@@ -1,5 +1,15 @@
 import { NextRequest, NextResponse } from "next/server"
+import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3"
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner"
 import { z } from "zod"
+
+const s3 = new S3Client({
+  region: process.env.AWS_REGION!,
+  credentials: {
+    accessKeyId: process.env.AWS_ACCESS_KEY_ID!,
+    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!,
+  },
+})
 
 const schema = z.object({
   fileName: z.string().min(1),
@@ -19,9 +29,13 @@ export async function GET(req: NextRequest) {
 
   const key = `uploads/${Date.now()}-${parsed.data.fileName}`
 
-  // TODO: replace with real S3 presigned URL when T2a is merged
-  return NextResponse.json({
-    url: "https://mock-s3.example.com/upload",
-    key,
+  const command = new PutObjectCommand({
+    Bucket: process.env.AWS_S3_BUCKET!,
+    Key: key,
+    ContentType: parsed.data.contentType,
   })
+
+  const url = await getSignedUrl(s3, command, { expiresIn: 600 })
+
+  return NextResponse.json({ url, key })
 }
