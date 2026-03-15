@@ -1,19 +1,14 @@
 import { NextRequest, NextResponse } from "next/server"
-import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3"
-import { getSignedUrl } from "@aws-sdk/s3-request-presigner"
 import { z } from "zod"
+import { getPresignedUploadUrl } from "@/lib/s3"
 
-const s3 = new S3Client({
-  region: process.env.AWS_REGION!,
-  credentials: {
-    accessKeyId: process.env.AWS_ACCESS_KEY_ID!,
-    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!,
-  },
-})
+const ALLOWED_CONTENT_TYPES = ["application/pdf"]
 
 const schema = z.object({
   fileName: z.string().min(1),
-  contentType: z.string().min(1),
+  contentType: z.string().refine((ct) => ALLOWED_CONTENT_TYPES.includes(ct), {
+    message: "Only PDF uploads are allowed",
+  }),
 })
 
 export async function GET(req: NextRequest) {
@@ -24,18 +19,11 @@ export async function GET(req: NextRequest) {
   })
 
   if (!parsed.success) {
-    return NextResponse.json({ error: "Invalid params" }, { status: 400 })
+    return NextResponse.json({ error: parsed.error.errors[0].message }, { status: 400 })
   }
 
   const key = `uploads/${Date.now()}-${parsed.data.fileName}`
-
-  const command = new PutObjectCommand({
-    Bucket: process.env.AWS_S3_BUCKET!,
-    Key: key,
-    ContentType: parsed.data.contentType,
-  })
-
-  const url = await getSignedUrl(s3, command, { expiresIn: 600 })
+  const url = await getPresignedUploadUrl(key, parsed.data.contentType)
 
   return NextResponse.json({ url, key })
 }
