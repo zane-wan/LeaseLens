@@ -39,3 +39,5 @@ prisma/migrations/*.sql.bak
 
 docs/
 
+# Database dumps
+data/rta-chunks.sql

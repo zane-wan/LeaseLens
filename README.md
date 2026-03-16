@@ -38,8 +38,8 @@ Fill in `.env.local`:
 # OpenAI
 OPENAI_API_KEY=
 
-# PostgreSQL
-DATABASE_URL=postgresql://<your-username>@localhost:5432/leaselens
+# PostgreSQL (use shared RDS — ask team for credentials)
+DATABASE_URL=postgresql://postgres:PASSWORD@leaselens-dev.xxxxx.ca-central-1.rds.amazonaws.com:5432/leaselens?sslmode=require
 
 # AWS S3
 AWS_ACCESS_KEY_ID=
@@ -56,6 +56,16 @@ NEXT_PUBLIC_APP_URL=http://localhost:3000
 
 ### 3. Set up PostgreSQL
 
+**Option A: Use the shared AWS RDS database (recommended)**
+
+Get the `DATABASE_URL` from the team (Slack DM). The shared database already has all tables and RTA embeddings pre-loaded — no local Postgres needed.
+
+```bash
+npx prisma generate     # generate Prisma client
+```
+
+**Option B: Local PostgreSQL (standalone development)**
+
 ```bash
 # macOS (Homebrew)
 brew install postgresql@17
@@ -63,14 +73,14 @@ brew services start postgresql@17
 
 # Create the database
 createdb leaselens
-```
-
-### 4. Push schema and start
-
-```bash
 npx prisma db push      # create tables
 npx prisma generate     # generate Prisma client
-npm run dev              # start dev server
+```
+
+### 4. Start the dev server
+
+```bash
+npm run dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000).
