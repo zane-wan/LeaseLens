@@ -1,9 +1,11 @@
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
 }
 
 datasource db {
-  provider = "postgresql"
+  provider   = "postgresql"
+  extensions = [vector]
 }
 
 model User {
@@ -140,6 +142,25 @@ enum Severity {
   LOW
   MEDIUM
   HIGH
+}
+
+model RtaChunk {
+  id                 String                   @id @default(cuid())
+  source             String                   // "RTA", "O.Reg 516/06", etc.
+  part               String?                  // e.g. "I", "II", "XI"
+  partTitle          String?                  // e.g. "Introduction"
+  section            String                   // e.g. "134"
+  subsection         String?                  // e.g. "1"
+  sectionTitle       String                   // e.g. "No additional charges"
+  fullCitation       String                   // e.g. "RTA s. 134(1)"
+  category           String                   // e.g. "deposits", "pets", "rent"
+  content            String                   // raw section text
+  contentWithContext String                   // context prepended for embedding
+  searchText         Unsupported("tsvector")? // PostgreSQL full-text search
+  embedding          Unsupported("vector(1536)")?
+  createdAt          DateTime                 @default(now())
+
+  @@index([category])
 }
 
 model Preset {
