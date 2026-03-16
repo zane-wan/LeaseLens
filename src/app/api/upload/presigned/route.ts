@@ -1,10 +1,15 @@
 import { NextRequest, NextResponse } from "next/server"
 import { z } from "zod"
 import { AuthError, requireAuthFromRequest } from "@/lib/auth"
+import { getPresignedUploadUrl } from "@/lib/s3"
+
+const ALLOWED_CONTENT_TYPES = ["application/pdf"]
 
 const schema = z.object({
   fileName: z.string().min(1),
-  contentType: z.string().min(1),
+  contentType: z.string().refine((ct) => ALLOWED_CONTENT_TYPES.includes(ct), {
+    message: "Only PDF uploads are allowed",
+  }),
 })
 
 export async function GET(req: NextRequest) {
@@ -17,17 +22,16 @@ export async function GET(req: NextRequest) {
     })
 
     if (!parsed.success) {
-      return NextResponse.json({ error: "Invalid params" }, { status: 400 })
+      return NextResponse.json({ error: parsed.error.errors[0].message }, { status: 400 })
     }
 
     const safeName = parsed.data.fileName.replace(/[^a-zA-Z0-9._-]/g, "_")
     const key = `users/${user.id}/uploads/${Date.now()}-${safeName}`
+    
+    // T2a now merged: using real S3 presigned URL
+    const url = await getPresignedUploadUrl(key, parsed.data.contentType as string)
 
-    // TODO: replace with real S3 presigned URL when T2a is merged
-    return NextResponse.json({
-      url: "https://mock-s3.example.com/upload",
-      key,
-    })
+    return NextResponse.json({ url, key })
   } catch (err) {
     if (err instanceof AuthError) {
       return NextResponse.json({ error: err.message }, { status: err.status })

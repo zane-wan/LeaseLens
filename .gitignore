@@ -38,3 +38,6 @@ prisma/migrations/*.sql.bak
 .claude/
 
 docs/
+
+# Database dumps
+data/rta-chunks.sql
