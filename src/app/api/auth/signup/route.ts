@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { hashPassword, signToken } from "@/lib/auth";
+import { hashPassword } from "@/lib/password";
+import { createSession, attachSessionCookie } from "@/lib/auth";
 
 const signupSchema = z.object({
   email: z.string().email(),
@@ -36,20 +37,14 @@ export async function POST(req: NextRequest) {
     data: { email, passwordHash, name },
   });
 
-  const token = await signToken({ userId: user.id, email: user.email });
+  const { token, expiresAt } = await createSession(user.id);
 
   const response = NextResponse.json(
     { user: { id: user.id, email: user.email, name: user.name } },
     { status: 201 }
   );
 
-  response.cookies.set("token", token, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-    maxAge: 7 * 24 * 60 * 60,
-    path: "/",
-  });
+  attachSessionCookie(response, token, expiresAt);
 
   return response;
 }

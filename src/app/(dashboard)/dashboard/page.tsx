@@ -9,10 +9,17 @@ import { AgreementItem } from "@/features/upload/types"
 export default function DashboardPage() {
   const { uploadState, upload, reset } = useUpload()
   const [agreements, setAgreements] = useState<AgreementItem[]>([])
+  const [pageError, setPageError] = useState<string | null>(null)
 
   const fetchAgreements = useCallback(async () => {
     const res = await fetch("/api/agreements")
-    if (res.ok) setAgreements(await res.json())
+    if (!res.ok) {
+      const err = await res.json().catch(() => null)
+      setPageError(err?.error ?? "Failed to fetch agreements")
+      return
+    }
+    setPageError(null)
+    setAgreements(await res.json())
   }, [])
 
   useEffect(() => {
@@ -25,13 +32,24 @@ export default function DashboardPage() {
   }
 
   const handleAnalyze = async (id: string) => {
-    // Triggers analysis — T5 will implement /api/agreements/[id]/analyze
-    await fetch(`/api/agreements/${id}/analyze`, { method: "POST" })
+    const res = await fetch(`/api/agreements/${id}/analyze`, { method: "POST" })
+    if (!res.ok) {
+      const err = await res.json().catch(() => null)
+      setPageError(err?.error ?? "Failed to start analysis")
+      return
+    }
+    setPageError(null)
     fetchAgreements()
   }
 
   const handleDelete = async (id: string) => {
-    await fetch(`/api/agreements/${id}`, { method: "DELETE" })
+    const res = await fetch(`/api/agreements/${id}`, { method: "DELETE" })
+    if (!res.ok) {
+      const err = await res.json().catch(() => null)
+      setPageError(err?.error ?? "Failed to delete agreement")
+      return
+    }
+    setPageError(null)
     fetchAgreements()
   }
 
@@ -43,6 +61,7 @@ export default function DashboardPage() {
         onFileDrop={handleFileDrop}
         onReset={reset}
       />
+      {pageError ? <p className="mt-3 text-sm text-destructive">{pageError}</p> : null}
       <AgreementList agreements={agreements} onAnalyze={handleAnalyze} onDelete={handleDelete} />
     </main>
   )

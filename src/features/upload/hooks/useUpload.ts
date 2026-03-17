@@ -39,7 +39,10 @@ export function useUpload(): UseUploadReturn {
       const presignedRes = await fetch(
         `/api/upload/presigned?fileName=${encodeURIComponent(file.name)}&contentType=application/pdf`
       )
-      if (!presignedRes.ok) throw new Error("get presigned URL failed")
+      if (!presignedRes.ok) {
+        const err = await presignedRes.json().catch(() => null)
+        throw new Error(err?.error ?? "get presigned URL failed")
+      }
       const { url, key } = await presignedRes.json()
 
       setUploadState({ status: "uploading", progress: 30, errorMessage: null })
@@ -65,7 +68,10 @@ export function useUpload(): UseUploadReturn {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ fileName: file.name, s3Key: key }),
       })
-      if (!agreementRes.ok) throw new Error("create agreement record failed")
+      if (!agreementRes.ok) {
+        const err = await agreementRes.json().catch(() => null)
+        throw new Error(err?.error ?? "create agreement record failed")
+      }
       const agreement = await agreementRes.json()
 
       setUploadState({ status: "success", progress: 100, errorMessage: null })

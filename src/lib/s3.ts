@@ -1,4 +1,4 @@
-import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3"
+import { S3Client, PutObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3"
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner"
 
 const s3 = new S3Client({
@@ -17,4 +17,17 @@ export async function getPresignedUploadUrl(key: string, contentType: string) {
   })
 
   return getSignedUrl(s3, command, { expiresIn: 600 })
+}
+
+export async function getS3Object(key: string): Promise<Buffer> {
+  const command = new GetObjectCommand({
+    Bucket: process.env.AWS_S3_BUCKET!,
+    Key: key,
+  })
+  const response = await s3.send(command)
+  const chunks: Uint8Array[] = []
+  for await (const chunk of response.Body as AsyncIterable<Uint8Array>) {
+    chunks.push(chunk)
+  }
+  return Buffer.concat(chunks)
 }
