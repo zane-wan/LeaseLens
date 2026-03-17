@@ -26,6 +26,14 @@ export default function DashboardPage() {
     fetchAgreements()
   }, [fetchAgreements])
 
+  // Poll every 3s while any agreement is being analyzed
+  useEffect(() => {
+    const hasProcessing = agreements.some((a) => a.status === "PROCESSING")
+    if (!hasProcessing) return
+    const timer = setInterval(fetchAgreements, 3000)
+    return () => clearInterval(timer)
+  }, [agreements, fetchAgreements])
+
   const handleFileDrop = async (file: File) => {
     const result = await upload(file)
     if (result) fetchAgreements()
@@ -36,6 +44,17 @@ export default function DashboardPage() {
     if (!res.ok) {
       const err = await res.json().catch(() => null)
       setPageError(err?.error ?? "Failed to start analysis")
+      return
+    }
+    setPageError(null)
+    fetchAgreements()
+  }
+
+  const handleCancel = async (id: string) => {
+    const res = await fetch(`/api/agreements/${id}/cancel`, { method: "POST" })
+    if (!res.ok) {
+      const err = await res.json().catch(() => null)
+      setPageError(err?.error ?? "Failed to cancel analysis")
       return
     }
     setPageError(null)
@@ -62,7 +81,7 @@ export default function DashboardPage() {
         onReset={reset}
       />
       {pageError ? <p className="mt-3 text-sm text-destructive">{pageError}</p> : null}
-      <AgreementList agreements={agreements} onAnalyze={handleAnalyze} onDelete={handleDelete} />
+      <AgreementList agreements={agreements} onAnalyze={handleAnalyze} onCancel={handleCancel} onDelete={handleDelete} />
     </main>
   )
 }

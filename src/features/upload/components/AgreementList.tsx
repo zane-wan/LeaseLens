@@ -3,7 +3,7 @@
 import { AgreementItem } from "../types"
 import { Badge } from "@/components/ui/badge"
 import { Button, buttonVariants } from "@/components/ui/button"
-import { MoreHorizontal, Calendar, Trash2, Play, FileText, RefreshCw, Loader2 } from "lucide-react"
+import { MoreHorizontal, Calendar, Trash2, Play, FileText, RefreshCw, Loader2, X } from "lucide-react"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -17,6 +17,7 @@ import {
 interface AgreementListProps {
   agreements: AgreementItem[]
   onAnalyze: (id: string) => void
+  onCancel: (id: string) => void
   onDelete: (id: string) => void
 }
 
@@ -34,7 +35,7 @@ const statusVariant: Record<AgreementItem["status"], "secondary" | "default" | "
   FAILED: "destructive",
 }
 
-export function AgreementList({ agreements, onAnalyze, onDelete }: AgreementListProps) {
+export function AgreementList({ agreements, onAnalyze, onCancel, onDelete }: AgreementListProps) {
   if (agreements.length === 0) {
     return <p className="text-muted-foreground text-sm mt-6">No agreements uploaded yet</p>
   }
@@ -72,10 +73,19 @@ export function AgreementList({ agreements, onAnalyze, onDelete }: AgreementList
                   </DropdownMenuItem>
                 )}
                 {a.status === "PROCESSING" && (
-                  <DropdownMenuItem disabled>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin text-muted-foreground" />
-                    <span>Analyzing...</span>
-                  </DropdownMenuItem>
+                  <>
+                    <DropdownMenuItem disabled>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin text-muted-foreground" />
+                      <span>Analyzing...</span>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={() => onCancel(a.id)}
+                      className="cursor-pointer text-muted-foreground"
+                    >
+                      <X className="mr-2 h-4 w-4" />
+                      <span>Cancel Analysis</span>
+                    </DropdownMenuItem>
+                  </>
                 )}
                 {a.status === "COMPLETED" && (
                   <a href={`/agreements/${a.id}`} className="w-full">
