@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation"
-import { LoginForm } from "@/features/auth/components/AuthForms"
+import { AuthPageShell, LoginForm } from "@/features/auth/components/AuthForms"
 import { getAuthUserFromServer } from "@/lib/auth"
 
 export default async function LoginPage() {
@@ -9,8 +9,13 @@ export default async function LoginPage() {
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center px-4 py-12">
+    <AuthPageShell
+      title="Welcome back"
+      description="Sign in to review leases, track analyses, and continue your Ontario compliance workflow."
+      quote="LeaseLens transformed how I review rental agreements. What used to take hours of legal research now takes minutes."
+      attribution="Tenant, Toronto"
+    >
       <LoginForm />
-    </main>
+    </AuthPageShell>
   )
 }

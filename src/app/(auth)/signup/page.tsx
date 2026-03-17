@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation"
-import { SignupForm } from "@/features/auth/components/AuthForms"
+import { AuthPageShell, SignupForm } from "@/features/auth/components/AuthForms"
 import { getAuthUserFromServer } from "@/lib/auth"
 
 export default async function SignupPage() {
@@ -9,8 +9,13 @@ export default async function SignupPage() {
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center px-4 py-12">
+    <AuthPageShell
+      title="Create your workspace"
+      description="Register with email or continue with Google, then start analyzing agreements in a user-isolated workspace."
+      quote="LeaseLens gives me confidence that every clause in my lease is compliant with Ontario law. It's like having a lawyer review every agreement in seconds."
+      attribution="Landlord, Ottawa"
+    >
       <SignupForm />
-    </main>
+    </AuthPageShell>
   )
 }
