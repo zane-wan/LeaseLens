@@ -1,15 +1,8 @@
-import { NextResponse } from "next/server";
+import { NextRequest } from "next/server"
+import { POST as handleActionPost } from "../[action]/route"
 
-export async function POST() {
-  const response = NextResponse.json({ message: "Logged out" });
-
-  response.cookies.set("token", "", {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-    maxAge: 0,
-    path: "/",
-  });
-
-  return response;
+export async function POST(req: NextRequest) {
+  return handleActionPost(req, {
+    params: Promise.resolve({ action: "logout" }),
+  })
 }
