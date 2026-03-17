@@ -1,0 +1,10 @@
+services:
+  leaselens:
+    build: .
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env.local
+    environment:
+      - HOSTNAME=0.0.0.0
+    restart: unless-stopped
