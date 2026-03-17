@@ -195,9 +195,17 @@ async function createMessage(req: NextRequest, sessionId: string) {
 async function streamChatResponse(req: NextRequest, sessionId: string) {
   const user = await requireAuthFromRequest(req)
   const body = await req.json()
-  const parsed = chatSchema.safeParse(body)
-  if (!parsed.success) {
-    return NextResponse.json({ error: "Invalid payload" }, { status: 400 })
+
+  // Support both { message: "..." } and { messages: [...] } (useChat format)
+  let userMessage: string
+  if (Array.isArray(body.messages)) {
+    const last = [...body.messages].reverse().find((m: { role: string }) => m.role === "user")
+    userMessage = last?.content?.trim() ?? ""
+  } else {
+    userMessage = body.message?.trim() ?? ""
+  }
+  if (!userMessage) {
+    return NextResponse.json({ error: "Message is required" }, { status: 400 })
   }
 
   // Verify session ownership
@@ -212,7 +220,7 @@ async function streamChatResponse(req: NextRequest, sessionId: string) {
   // Build context: analysis results + RAG + history
   const { analysisContext, ragContext, history } = await buildChatContext(
     sessionId,
-    parsed.data.message,
+    userMessage,
   )
 
   // Save user message
@@ -221,7 +229,7 @@ async function streamChatResponse(req: NextRequest, sessionId: string) {
       sessionId,
       userId: user.id,
       role: "USER",
-      content: parsed.data.message,
+      content: userMessage,
       citations: [],
     },
   })
@@ -232,7 +240,7 @@ async function streamChatResponse(req: NextRequest, sessionId: string) {
       role: m.role.toLowerCase() as "user" | "assistant",
       content: m.content,
     })),
-    { role: "user" as const, content: parsed.data.message },
+    { role: "user" as const, content: userMessage },
   ]
 
   // Stream response with onFinish callback to persist the assistant message
