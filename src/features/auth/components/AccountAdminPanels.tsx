@@ -72,9 +72,6 @@ export function AccountSettings() {
 
     const payload: Record<string, string> = {}
     if (name.trim()) payload.name = name.trim()
-    if (email.trim() !== (user?.email ?? "")) {
-      payload.email = email.trim()
-    }
     if (currentPassword) payload.currentPassword = currentPassword
     if (newPassword) payload.newPassword = newPassword
 
@@ -135,34 +132,29 @@ export function AccountSettings() {
   }
 
   return (
-    <div className="mx-auto max-w-xl rounded-xl border bg-card p-6">
-      <h1 className="text-xl font-semibold">Account settings</h1>
-      <p className="mt-1 text-sm text-muted-foreground">
-        Role: {user.role}
-      </p>
-
-      <form onSubmit={onSubmit} className="mt-6 space-y-4">
-        <div className="space-y-1">
-          <label htmlFor="email" className="text-sm font-medium">Email</label>
-          <input
-            id="email"
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            className="h-10 w-full rounded-md border bg-background px-3 text-sm"
-            required
-          />
+    <div className="mx-auto max-w-xl space-y-6">
+      <div>
+        <h1 className="text-3xl font-bold tracking-tight">Account settings</h1>
+        <div className="mt-2 flex items-center gap-2">
+          <span className="text-muted-foreground">{user.email}</span>
+          <span className="inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold text-muted-foreground">
+            {user.role}
+          </span>
         </div>
+      </div>
 
-        <div className="space-y-1">
-          <label htmlFor="name" className="text-sm font-medium">Name</label>
-          <input
-            id="name"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            className="h-10 w-full rounded-md border bg-background px-3 text-sm"
-          />
-        </div>
+      <div className="rounded-xl border bg-card p-6">
+        <h2 className="text-lg font-semibold mb-4">Profile details</h2>
+        <form onSubmit={onSubmit} className="space-y-4">
+          <div className="space-y-1">
+            <label htmlFor="name" className="text-sm font-medium">Name</label>
+            <input
+              id="name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className="h-10 w-full rounded-md border bg-background px-3 text-sm"
+            />
+          </div>
 
         <div className="space-y-1">
           <label htmlFor="current-password" className="text-sm font-medium">Current password</label>
@@ -196,40 +188,43 @@ export function AccountSettings() {
         <Button type="submit" disabled={loading}>
           {loading ? "Saving..." : "Save changes"}
         </Button>
-      </form>
+        </form>
+      </div>
 
-      <form onSubmit={onDeleteAccount} className="mt-8 space-y-3 rounded-lg border border-destructive/40 p-4">
-        <h2 className="text-sm font-semibold text-destructive">Delete account</h2>
-        <p className="text-xs text-muted-foreground">
-          This permanently deletes your account and all related data.
-        </p>
-        <div className="space-y-1">
-          <label htmlFor="delete-password" className="text-sm font-medium">Current password</label>
-          <input
-            id="delete-password"
-            type="password"
-            value={deletePassword}
-            onChange={(e) => setDeletePassword(e.target.value)}
-            className="h-10 w-full rounded-md border bg-background px-3 text-sm"
-          />
-          <p className="text-xs text-muted-foreground">
-            Required for password-based accounts; optional for Google-only accounts.
+      <div className="rounded-xl border border-destructive/20 bg-card p-6">
+        <h2 className="text-lg font-semibold text-destructive mb-4">Danger zone</h2>
+        <form onSubmit={onDeleteAccount} className="space-y-4">
+          <p className="text-sm text-muted-foreground">
+            This permanently deletes your account and all related data.
           </p>
-        </div>
-        <div className="space-y-1">
-          <label htmlFor="delete-confirm" className="text-sm font-medium">Type DELETE to confirm</label>
-          <input
-            id="delete-confirm"
-            value={deleteConfirm}
-            onChange={(e) => setDeleteConfirm(e.target.value)}
-            className="h-10 w-full rounded-md border bg-background px-3 text-sm"
-            required
-          />
-        </div>
-        <Button type="submit" variant="destructive" disabled={deleting}>
-          {deleting ? "Deleting..." : "Delete account"}
-        </Button>
-      </form>
+          <div className="space-y-1">
+            <label htmlFor="delete-password" className="text-sm font-medium">Current password</label>
+            <input
+              id="delete-password"
+              type="password"
+              value={deletePassword}
+              onChange={(e) => setDeletePassword(e.target.value)}
+              className="h-10 w-full rounded-md border bg-background px-3 text-sm"
+            />
+            <p className="text-xs text-muted-foreground">
+              Required for password-based accounts; optional for Google-only accounts.
+            </p>
+          </div>
+          <div className="space-y-1">
+            <label htmlFor="delete-confirm" className="text-sm font-medium">Type DELETE to confirm</label>
+            <input
+              id="delete-confirm"
+              value={deleteConfirm}
+              onChange={(e) => setDeleteConfirm(e.target.value)}
+              className="h-10 w-full rounded-md border bg-background px-3 text-sm"
+              required
+            />
+          </div>
+          <Button type="submit" variant="destructive" disabled={deleting}>
+            {deleting ? "Deleting..." : "Delete account"}
+          </Button>
+        </form>
+      </div>
     </div>
   )
 }
