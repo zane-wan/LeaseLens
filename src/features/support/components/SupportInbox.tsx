@@ -137,6 +137,8 @@ export function SupportInbox() {
             onChange={(e) => setSubject(e.target.value)}
             placeholder="Subject"
             required
+            minLength={3}
+            maxLength={180}
             className="h-9 w-full rounded-md border bg-background px-3 text-sm"
           />
           <textarea
