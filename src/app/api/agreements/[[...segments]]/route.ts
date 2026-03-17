@@ -11,8 +11,16 @@ const createSchema = z.object({
 
 async function listAgreements(req: NextRequest) {
   const user = await requireAuthFromRequest(req)
+  const { searchParams } = new URL(req.url)
+  const all = searchParams.get("all") === "true"
+
   const agreements = await prisma.agreement.findMany({
-    where: { userId: user.id },
+    where: {
+      userId: user.id,
+      // By default, only show agreements not yet linked to a chat session
+      // (the user's current working batch). Pass ?all=true to get everything.
+      ...(!all && { chatSessions: { none: {} } }),
+    },
     orderBy: { uploadedAt: "desc" },
   })
   return NextResponse.json(agreements)
