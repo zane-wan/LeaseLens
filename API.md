@@ -83,3 +83,108 @@ Upload PDF → POST /api/agreements (create record)
            → Poll GET /api/agreements/:id/status
              until analysis.status === "COMPLETED" or "FAILED"
 ```
+
+---
+
+## Chat Sessions
+
+A chat session groups one or more uploaded agreements and a conversation thread. After analysis, users can chat with the LLM about their lease. The LLM has context of all agreements in the session + their analysis results + RAG-retrieved RTA sections.
+
+### Create Session
+
+```
+POST /api/chats/sessions
+```
+
+**Body**
+```json
+{
+  "title": "My lease review",
+  "agreementIds": ["clx...", "clx..."]
+}
+```
+
+`agreementIds` is optional. Can link agreements later.
+
+**Response** `201`
+```json
+{
+  "id": "clx...",
+  "title": "My lease review",
+  "agreements": [{ "id": "clx...", "fileName": "lease.pdf" }],
+  "createdAt": "...",
+  "updatedAt": "..."
+}
+```
+
+### List Sessions
+
+```
+GET /api/chats/sessions
+```
+
+Returns all sessions for the authenticated user, most recent first.
+
+### Get Latest Session (session restore)
+
+```
+GET /api/chats/sessions/latest
+```
+
+Returns the most recent session with full data: agreements (with analysis + clause results) and all chat messages. Used on page load to restore the user's last session.
+
+### Send Chat Message (streaming)
+
+```
+POST /api/chats/sessions/:id/chat
+```
+
+**Body**
+```json
+{ "message": "Can my landlord enforce the no-pets clause?" }
+```
+
+**Response**: Server-Sent Events (SSE) stream in AI SDK data format. Use the `useChat` hook from `ai/react` on the frontend, or read the stream manually.
+
+The backend:
+1. Loads all agreements + analysis results in the session
+2. RAG-retrieves relevant RTA sections for the question
+3. Sends conversation history + context to GPT-4o
+4. Streams the response
+5. Persists both user and assistant messages on completion
+
+### List Messages
+
+```
+GET /api/chats/sessions/:id/messages
+```
+
+Returns all messages in a session, ordered chronologically.
+
+### Store Message (manual)
+
+```
+POST /api/chats/sessions/:id/messages
+```
+
+**Body**
+```json
+{
+  "role": "USER",
+  "content": "...",
+  "citations": []
+}
+```
+
+For manually storing messages (e.g., system messages). The streaming chat endpoint (`/chat`) handles persistence automatically.
+
+### Full User Flow
+
+```
+1. Upload PDFs  → POST /api/agreements (×N, one per file)
+2. Create session → POST /api/chats/sessions { title, agreementIds: [...] }
+3. Analyze        → POST /api/agreements/:id/analyze (per agreement)
+4. Poll           → GET /api/agreements/:id/status (until COMPLETED)
+5. Chat           → POST /api/chats/sessions/:id/chat { message }
+6. Resume         → GET /api/chats/sessions/latest (on re-login)
+```
