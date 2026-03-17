@@ -39,7 +39,7 @@ Fill in `.env.local`:
 OPENAI_API_KEY=
 
 # PostgreSQL (use shared RDS — ask team for credentials)
-DATABASE_URL=postgresql://postgres:PASSWORD@leaselens-dev.xxxxx.ca-central-1.rds.amazonaws.com:5432/leaselens?sslmode=require
+DATABASE_URL=postgresql://postgres:PASSWORD@leaselens-dev.xxxxx.ca-central-1.rds.amazonaws.com:5432/leaselens?sslmode=no-verify
 
 # AWS S3
 AWS_ACCESS_KEY_ID=
