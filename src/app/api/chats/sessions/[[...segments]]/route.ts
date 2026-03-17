@@ -2,10 +2,13 @@ import { NextRequest, NextResponse } from "next/server"
 import { z } from "zod"
 import { AuthError, requireAuthFromRequest } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { streamText } from "ai"
+import { modelConfig, systemPrompts } from "@/config/llm"
+import { retrieveContext } from "@/lib/rag"
 
 const sessionSchema = z.object({
   title: z.string().trim().min(1).max(120),
-  agreementId: z.string().min(1).optional(),
+  agreementIds: z.array(z.string().min(1)).optional(),
 })
 
 const messageSchema = z.object({
@@ -13,6 +16,14 @@ const messageSchema = z.object({
   content: z.string().trim().min(1),
   citations: z.array(z.string()).optional(),
 })
+
+const chatSchema = z.object({
+  message: z.string().trim().min(1),
+})
+
+// ---------------------------------------------------------------------------
+// Session CRUD
+// ---------------------------------------------------------------------------
 
 async function listSessions(req: NextRequest) {
   const user = await requireAuthFromRequest(req)
@@ -22,12 +33,47 @@ async function listSessions(req: NextRequest) {
     select: {
       id: true,
       title: true,
-      agreementId: true,
+      agreements: { select: { id: true, fileName: true } },
       createdAt: true,
       updatedAt: true,
     },
   })
   return NextResponse.json(sessions)
+}
+
+async function getLatestSession(req: NextRequest) {
+  const user = await requireAuthFromRequest(req)
+  const session = await prisma.chatSession.findFirst({
+    where: { userId: user.id },
+    orderBy: { updatedAt: "desc" },
+    include: {
+      agreements: {
+        include: {
+          analysis: {
+            include: {
+              clauseResults: { orderBy: { clauseIndex: "asc" } },
+            },
+          },
+        },
+      },
+      messages: {
+        orderBy: { createdAt: "asc" },
+        select: {
+          id: true,
+          role: true,
+          content: true,
+          citations: true,
+          createdAt: true,
+        },
+      },
+    },
+  })
+
+  if (!session) {
+    return NextResponse.json({ error: "No sessions found" }, { status: 404 })
+  }
+
+  return NextResponse.json(session)
 }
 
 async function createChatSession(req: NextRequest) {
@@ -38,16 +84,17 @@ async function createChatSession(req: NextRequest) {
     return NextResponse.json({ error: "Invalid payload" }, { status: 400 })
   }
 
-  if (parsed.data.agreementId) {
-    const agreement = await prisma.agreement.findFirst({
+  // Validate all agreement IDs belong to this user
+  if (parsed.data.agreementIds && parsed.data.agreementIds.length > 0) {
+    const agreements = await prisma.agreement.findMany({
       where: {
-        id: parsed.data.agreementId,
+        id: { in: parsed.data.agreementIds },
         userId: user.id,
       },
       select: { id: true },
     })
-    if (!agreement) {
-      return NextResponse.json({ error: "Agreement not found" }, { status: 404 })
+    if (agreements.length !== parsed.data.agreementIds.length) {
+      return NextResponse.json({ error: "One or more agreements not found" }, { status: 404 })
     }
   }
 
@@ -55,12 +102,14 @@ async function createChatSession(req: NextRequest) {
     data: {
       userId: user.id,
       title: parsed.data.title,
-      agreementId: parsed.data.agreementId ?? null,
+      agreements: parsed.data.agreementIds?.length
+        ? { connect: parsed.data.agreementIds.map((id) => ({ id })) }
+        : undefined,
     },
     select: {
       id: true,
       title: true,
-      agreementId: true,
+      agreements: { select: { id: true, fileName: true } },
       createdAt: true,
       updatedAt: true,
     },
@@ -68,6 +117,10 @@ async function createChatSession(req: NextRequest) {
 
   return NextResponse.json(session, { status: 201 })
 }
+
+// ---------------------------------------------------------------------------
+// Messages CRUD
+// ---------------------------------------------------------------------------
 
 async function listMessages(req: NextRequest, sessionId: string) {
   const user = await requireAuthFromRequest(req)
@@ -80,10 +133,7 @@ async function listMessages(req: NextRequest, sessionId: string) {
   }
 
   const messages = await prisma.chatMessage.findMany({
-    where: {
-      sessionId,
-      userId: user.id,
-    },
+    where: { sessionId },
     orderBy: { createdAt: "asc" },
     select: {
       id: true,
@@ -138,14 +188,148 @@ async function createMessage(req: NextRequest, sessionId: string) {
   return NextResponse.json(message, { status: 201 })
 }
 
+// ---------------------------------------------------------------------------
+// Streaming chat — user sends a message, LLM responds with RAG context
+// ---------------------------------------------------------------------------
+
+async function streamChatResponse(req: NextRequest, sessionId: string) {
+  const user = await requireAuthFromRequest(req)
+  const body = await req.json()
+  const parsed = chatSchema.safeParse(body)
+  if (!parsed.success) {
+    return NextResponse.json({ error: "Invalid payload" }, { status: 400 })
+  }
+
+  // Verify session ownership
+  const session = await prisma.chatSession.findFirst({
+    where: { id: sessionId, userId: user.id },
+    select: { id: true },
+  })
+  if (!session) {
+    return NextResponse.json({ error: "Session not found" }, { status: 404 })
+  }
+
+  // Build context: analysis results + RAG + history
+  const { analysisContext, ragContext, history } = await buildChatContext(
+    sessionId,
+    parsed.data.message,
+  )
+
+  // Save user message
+  await prisma.chatMessage.create({
+    data: {
+      sessionId,
+      userId: user.id,
+      role: "USER",
+      content: parsed.data.message,
+      citations: [],
+    },
+  })
+
+  // Build messages array for LLM
+  const messages = [
+    ...history.map((m) => ({
+      role: m.role.toLowerCase() as "user" | "assistant",
+      content: m.content,
+    })),
+    { role: "user" as const, content: parsed.data.message },
+  ]
+
+  // Stream response with onFinish callback to persist the assistant message
+  const result = streamText({
+    model: modelConfig.model,
+    temperature: 0.3,
+    system: `${systemPrompts.chat}
+
+## Lease Analysis Results
+${analysisContext}
+
+## Relevant Ontario Law (RTA)
+${ragContext.join("\n\n")}`,
+    messages,
+    onFinish: async ({ text }) => {
+      await prisma.chatMessage.create({
+        data: {
+          sessionId,
+          userId: user.id,
+          role: "ASSISTANT",
+          content: text,
+          citations: [],
+        },
+      })
+      await prisma.chatSession.update({
+        where: { id: sessionId },
+        data: { updatedAt: new Date() },
+      })
+    },
+  })
+
+  return result.toDataStreamResponse()
+}
+
+async function buildChatContext(sessionId: string, userMessage: string) {
+  // 1. Load all agreements with analysis results
+  const session = await prisma.chatSession.findUnique({
+    where: { id: sessionId },
+    include: {
+      agreements: {
+        include: {
+          analysis: {
+            include: { clauseResults: { orderBy: { clauseIndex: "asc" } } },
+          },
+        },
+      },
+    },
+  })
+
+  const agreements = session?.agreements ?? []
+
+  // 2. Format analysis results
+  const analysisContext = agreements
+    .map((a) => {
+      const clauses = a.analysis?.clauseResults ?? []
+      if (clauses.length === 0) return `## ${a.fileName}\nNot yet analyzed.`
+      const clauseBlock = clauses
+        .map(
+          (c) =>
+            `- [${c.compliance}${c.severity ? ` / ${c.severity}` : ""}] "${c.clauseTitle}": ${c.explanation} (${c.rtaCitations.join(", ")})`,
+        )
+        .join("\n")
+      return `## ${a.fileName}\nOverall: ${a.analysis?.overallSummary ?? "N/A"}\nRisk Score: ${a.analysis?.riskScore ?? "N/A"}/100\n\nClauses:\n${clauseBlock}`
+    })
+    .join("\n\n---\n\n")
+
+  // 3. RAG retrieve for the user's question
+  const ragContext = await retrieveContext(userMessage, { topK: 5 })
+
+  // 4. Load conversation history (filter to USER/ASSISTANT only)
+  const history = await prisma.chatMessage.findMany({
+    where: {
+      sessionId,
+      role: { in: ["USER", "ASSISTANT"] },
+    },
+    orderBy: { createdAt: "asc" },
+    select: { role: true, content: true },
+  })
+
+  return { analysisContext, ragContext, history }
+}
+
+// ---------------------------------------------------------------------------
+// Route handlers
+// ---------------------------------------------------------------------------
+
 export async function GET(
   req: NextRequest,
-  { params }: { params: Promise<{ segments?: string[] }> }
+  { params }: { params: Promise<{ segments?: string[] }> },
 ) {
   try {
     const { segments = [] } = await params
     if (segments.length === 0) {
       return await listSessions(req)
+    }
+    if (segments.length === 1 && segments[0] === "latest") {
+      return await getLatestSession(req)
     }
     if (segments.length === 2 && segments[1] === "messages") {
       return await listMessages(req, segments[0])
@@ -161,7 +345,7 @@ export async function GET(
 
 export async function POST(
   req: NextRequest,
-  { params }: { params: Promise<{ segments?: string[] }> }
+  { params }: { params: Promise<{ segments?: string[] }> },
 ) {
   try {
     const { segments = [] } = await params
@@ -170,6 +354,9 @@ export async function POST(
     }
     if (segments.length === 2 && segments[1] === "messages") {
       return await createMessage(req, segments[0])
+    }
+    if (segments.length === 2 && segments[1] === "chat") {
+      return await streamChatResponse(req, segments[0])
     }
     return NextResponse.json({ error: "Not found" }, { status: 404 })
   } catch (err) {
