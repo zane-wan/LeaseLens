@@ -1,45 +1,72 @@
 import { NextRequest, NextResponse } from "next/server";
+import { AuthError, requireAuthFromRequest } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { runAnalysisPipeline } from "@/features/analysis/pipeline/orchestrator";
 
 /**
  * POST /api/agreements/:id/analyze
  *
- * Triggers the full analysis pipeline for an uploaded lease agreement.
- * Returns immediately with the analysis record; processing continues async.
+ * Queues the analysis record in the DB, then fires the full pipeline
+ * in the background. Returns 202 immediately; client polls status.
  */
 export async function POST(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const { id } = await params;
+  try {
+    const user = await requireAuthFromRequest(req);
+    const { id } = await params;
 
-  // TODO: replace with real auth session after T1 wiring
-  const userId = "dev-user";
+    const agreement = await prisma.agreement.findFirst({
+      where: { id, userId: user.id },
+      select: { id: true },
+    });
 
-  const agreement = await prisma.agreement.findUnique({ where: { id } });
+    if (!agreement) {
+      return NextResponse.json({ error: "Agreement not found" }, { status: 404 });
+    }
 
-  if (!agreement) {
-    return NextResponse.json({ error: "Agreement not found" }, { status: 404 });
-  }
-  if (agreement.userId !== userId) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
-  if (agreement.status === "PROCESSING") {
+    // Create / reset the Analysis record so the UI immediately sees QUEUED.
+    const analysis = await prisma.analysis.upsert({
+      where: { agreementId: agreement.id },
+      create: {
+        agreementId: agreement.id,
+        status: "QUEUED",
+      },
+      update: {
+        status: "QUEUED",
+        errorMessage: null,
+        startedAt: null,
+        completedAt: null,
+      },
+      select: {
+        id: true,
+        agreementId: true,
+        status: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+
+    await prisma.agreement.update({
+      where: { id: agreement.id },
+      data: { status: "PROCESSING" },
+    });
+
+    // Fire-and-forget: run the full pipeline in the background.
+    // runAnalysisPipeline internally transitions status → PROCESSING → COMPLETED/FAILED.
+    runAnalysisPipeline(agreement.id).catch((err) => {
+      console.error(`[analyze] Pipeline failed for agreement ${agreement.id}:`, err);
+    });
+
     return NextResponse.json(
-      { error: "Analysis already in progress" },
-      { status: 409 },
+      { analysis, message: "Analysis queued." },
+      { status: 202 },
     );
+  } catch (err) {
+    if (err instanceof AuthError) {
+      return NextResponse.json({ error: err.message }, { status: err.status });
+    }
+    return NextResponse.json({ error: "Failed to queue analysis" }, { status: 500 });
   }
-
-  // Fire-and-forget: run pipeline in the background.
-  // The client polls /api/agreements/:id/status for progress.
-  runAnalysisPipeline(id).catch((err) => {
-    console.error(`[analyze] Pipeline failed for agreement ${id}:`, err);
-  });
-
-  return NextResponse.json(
-    { message: "Analysis started", agreementId: id },
-    { status: 202 },
-  );
 }

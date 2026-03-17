@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { z } from "zod"
 import { AuthError, requireAuthFromRequest } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { runAnalysisPipeline } from "@/features/analysis/pipeline/orchestrator"
 
 const createSchema = z.object({
   fileName: z.string().min(1),
@@ -126,10 +127,15 @@ async function queueAgreementAnalysis(req: NextRequest, id: string) {
     },
   })
 
+  // Fire-and-forget: run the full pipeline in the background.
+  runAnalysisPipeline(agreement.id).catch((err) => {
+    console.error(`[analyze] Pipeline failed for agreement ${agreement.id}:`, err)
+  })
+
   return NextResponse.json(
     {
       analysis,
-      message: "Analysis queued. Full pipeline integration is pending.",
+      message: "Analysis queued.",
     },
     { status: 202 }
   )
