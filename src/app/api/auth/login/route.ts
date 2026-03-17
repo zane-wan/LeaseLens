@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { comparePassword, signToken } from "@/lib/auth";
+import { createSession, attachSessionCookie } from "@/lib/auth";
+import { verifyPassword } from "@/lib/password";
 
 const loginSchema = z.object({
   email: z.string().email(),
@@ -29,7 +30,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const valid = await comparePassword(password, user.passwordHash);
+  const valid = await verifyPassword(password, user.passwordHash);
   if (!valid) {
     return NextResponse.json(
       { error: "Invalid email or password" },
@@ -37,19 +38,13 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const token = await signToken({ userId: user.id, email: user.email });
+  const { token, expiresAt } = await createSession(user.id);
 
   const response = NextResponse.json({
     user: { id: user.id, email: user.email, name: user.name },
   });
 
-  response.cookies.set("token", token, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-    maxAge: 7 * 24 * 60 * 60,
-    path: "/",
-  });
+  attachSessionCookie(response, token, expiresAt);
 
   return response;
 }
