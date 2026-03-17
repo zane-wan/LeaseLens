@@ -9,11 +9,18 @@ const s3 = new S3Client({
   },
 })
 
-export async function getPresignedUploadUrl(key: string, contentType: string) {
+export const MAX_UPLOAD_SIZE_BYTES = 20 * 1024 * 1024 // 20 MB
+
+export async function getPresignedUploadUrl(
+  key: string,
+  contentType: string,
+  fileSize: number,
+) {
   const command = new PutObjectCommand({
     Bucket: process.env.AWS_S3_BUCKET!,
     Key: key,
     ContentType: contentType,
+    ContentLength: fileSize,
   })
 
   return getSignedUrl(s3, command, { expiresIn: 600 })

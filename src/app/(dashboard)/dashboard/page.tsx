@@ -7,7 +7,7 @@ import { useUpload } from "@/features/upload/hooks/useUpload"
 import { AgreementItem } from "@/features/upload/types"
 
 export default function DashboardPage() {
-  const { uploadState, upload, reset } = useUpload()
+  const { uploadState, uploadMany, reset } = useUpload()
   const [agreements, setAgreements] = useState<AgreementItem[]>([])
   const [pageError, setPageError] = useState<string | null>(null)
 
@@ -34,9 +34,9 @@ export default function DashboardPage() {
     return () => clearInterval(timer)
   }, [agreements, fetchAgreements])
 
-  const handleFileDrop = async (file: File) => {
-    const result = await upload(file)
-    if (result) fetchAgreements()
+  const handleFilesDrop = async (files: File[]) => {
+    const results = await uploadMany(files)
+    if (results.length > 0) fetchAgreements()
   }
 
   const handleAnalyze = async (id: string) => {
@@ -77,7 +77,7 @@ export default function DashboardPage() {
       <h1 className="text-2xl font-bold mb-6">My Agreements</h1>
       <DropZone
         uploadState={uploadState}
-        onFileDrop={handleFileDrop}
+        onFilesDrop={handleFilesDrop}
         onReset={reset}
       />
       {pageError ? <p className="mt-3 text-sm text-destructive">{pageError}</p> : null}
