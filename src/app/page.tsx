@@ -1,70 +1,40 @@
-import Link from "next/link"
-import { Button } from "@/components/ui/button"
-import { getAuthUserFromServer } from "@/lib/auth"
+import { FeatureSection } from "@/components/feature-section";
 
-export default async function Home() {
-  const user = await getAuthUserFromServer()
-
+export default function Home() {
   return (
-    <main className="flex min-h-[calc(100vh-4.5rem)] items-center px-6 py-12">
-      <div className="mx-auto grid w-full max-w-6xl gap-10 lg:grid-cols-[1.1fr_0.9fr] lg:items-center">
-        <section className="space-y-8">
-          <div className="space-y-4">
-            <p className="text-xs font-semibold uppercase tracking-[0.3em] text-muted-foreground">
-              Ontario residential tenancy
-            </p>
-            <h1 className="max-w-3xl text-5xl font-semibold tracking-tight text-balance sm:text-6xl">
-              AI-powered lease review that stays scoped to each user's workspace.
-            </h1>
-            <p className="max-w-2xl text-lg leading-8 text-muted-foreground">
-              Upload agreements, trigger clause analysis, and manage results through
-              an email-based multi-user system with Google sign-in support and
-              per-user data isolation.
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-3">
-            {user ? (
-              <Link href="/dashboard">
-                <Button size="lg">Go to dashboard</Button>
-              </Link>
-            ) : (
-              <>
-                <Link href="/login">
-                  <Button size="lg">Sign in</Button>
-                </Link>
-                <Link href="/signup">
-                  <Button size="lg" variant="outline">Create account</Button>
-                </Link>
-              </>
-            )}
-          </div>
-        </section>
+    <main className="flex min-h-screen flex-col items-center">
+      {/* Hero Section */}
+      <section className="flex flex-col items-center justify-center p-24 text-center">
+        <h1 className="text-5xl font-extrabold tracking-tight">LeaseLens</h1>
+        <p className="mt-4 text-xl text-muted-foreground max-w-[600px]">
+          AI-powered lease agreement analysis for Ontario residential tenancy law
+        </p>
+      </section>
 
-        <section className="rounded-[2rem] border bg-card/60 p-6 shadow-sm backdrop-blur sm:p-8">
-          <div className="space-y-6">
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="rounded-2xl border bg-background/80 p-4">
-                <p className="text-sm text-muted-foreground">Login options</p>
-                <p className="mt-2 text-xl font-semibold">Email or Google</p>
-              </div>
-              <div className="rounded-2xl border bg-background/80 p-4">
-                <p className="text-sm text-muted-foreground">Isolation</p>
-                <p className="mt-2 text-xl font-semibold">Per-user files and chats</p>
-              </div>
-            </div>
-            <blockquote className="space-y-3 border-l-4 border-primary/60 pl-5 text-base italic leading-7 text-muted-foreground">
-              <p>
-                &ldquo;LeaseLens transformed how I review rental agreements. The
-                Ontario-specific clause checks surface issues fast without mixing my
-                workspace with anyone else's.&rdquo;
-              </p>
-              <footer className="text-sm font-medium not-italic text-foreground">
-                Tenant, Toronto
-              </footer>
-            </blockquote>
-          </div>
-        </section>
+      {/* Feature Sections */}
+      <div className="flex flex-col gap-8 md:gap-16 pb-24">
+        <FeatureSection
+          title="Sophisticated Cash Flows Analysis, Simplified"
+          description="Modeling the many permutations of a lease proposal using a spreadsheet can be a painfully manual task. LeaseLens analysis is a powerful tool that automatically calculates cash flow for new and existing leases."
+          imageSrc="/dashboard-mockup.png"
+          imageAlt="LeaseLens Dashboard Mockup"
+        />
+
+        <FeatureSection
+          title="Automated Clause Extraction & Risk Alerts"
+          description="Upload any PDF lease agreement and our AI engine instantly identifies rent escalations, termination rights, and unusual clauses. Avoid costly oversights by uncovering hidden risks hidden in dense legal jargon before you sign."
+          imageSrc="/document-analysis-mockup.png"
+          imageAlt="LeaseLens AI Document Analysis"
+          reversed={true}
+        />
+
+        <FeatureSection
+          title="Real-Time Portfolio Tracking & Management"
+          description="Get a crystal-clear overview of your entire real estate portfolio. Monitor occupancy rates, upcoming expirations, and revenue metrics across all properties from a single intuitive command center."
+          imageSrc="/portfolio-overview-mockup.png"
+          imageAlt="LeaseLens Portfolio Overview"
+        />
       </div>
     </main>
-  )
+  );
 }

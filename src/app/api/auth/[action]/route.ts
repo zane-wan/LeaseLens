@@ -16,6 +16,7 @@ import {
   signupWithPassword,
   updateOwnAccount,
 } from "@/lib/auth-service"
+import { prisma } from "@/lib/prisma"
 import { consumeRateLimit, getClientIdentifier } from "@/lib/rate-limit"
 
 const signupSchema = z.object({
@@ -53,7 +54,19 @@ export async function GET(
     }
     if (action === "account") {
       const user = await requireAuthFromRequest(req)
-      return NextResponse.json({ user })
+      let subscriptionStatus: string | null = null
+      try {
+        const dbUser = await prisma.user.findUnique({
+          where: { id: user.id },
+          select: { subscriptionStatus: true },
+        })
+        subscriptionStatus = dbUser?.subscriptionStatus ?? null
+      } catch {
+        subscriptionStatus = null
+      }
+      return NextResponse.json({
+        user: { ...user, subscriptionStatus },
+      })
     }
 
     return NextResponse.json({ error: "Not found" }, { status: 404 })

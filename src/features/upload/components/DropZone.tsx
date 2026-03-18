@@ -7,23 +7,25 @@ import { UploadState } from "../types"
 
 interface DropZoneProps {
   uploadState: UploadState
-  onFileDrop: (file: File) => void
+  onFilesDrop: (files: File[]) => void
   onReset: () => void
 }
 
-export function DropZone({ uploadState, onFileDrop, onReset }: DropZoneProps) {
+export function DropZone({ uploadState, onFilesDrop, onReset }: DropZoneProps) {
   const onDrop = useCallback(
     (acceptedFiles: File[]) => {
-      if (acceptedFiles[0]) onFileDrop(acceptedFiles[0])
+      if (acceptedFiles.length > 0) onFilesDrop(acceptedFiles)
     },
-    [onFileDrop]
+    [onFilesDrop]
   )
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
     accept: { "application/pdf": [".pdf"] },
-    maxFiles: 1,
     disabled: uploadState.status === "uploading",
+    multiple: true,
+    maxFiles: 10,
+    maxSize: 20 * 1024 * 1024, // 20 MB
   })
 
   return (
@@ -38,9 +40,10 @@ export function DropZone({ uploadState, onFileDrop, onReset }: DropZoneProps) {
       >
         <input {...getInputProps()} />
         {uploadState.status === "idle" && (
-          <p className="text-muted-foreground">
-            {isDragActive ? "Release to upload" : "Drag and drop PDF file, or click to select"}
-          </p>
+          <div className="text-muted-foreground">
+            <p>{isDragActive ? "Release to upload" : "Drag and drop PDF files, or click to select"}</p>
+            <p className="text-xs mt-1">Up to 10 files, max 20 MB each</p>
+          </div>
         )}
         {uploadState.status === "uploading" && (
           <p className="text-muted-foreground">Uploading...</p>
@@ -61,8 +64,8 @@ export function DropZone({ uploadState, onFileDrop, onReset }: DropZoneProps) {
         <button
           onClick={onReset}
           className="mt-2 text-sm text-muted-foreground underline"
-        > 
-          Upload another one
+        >
+          Upload more files
         </button>
       )}
     </div>

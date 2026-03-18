@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useState } from "react"
 import type { UserRole } from "@prisma/client"
 import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
 
 async function readJsonSafely<T>(res: Response): Promise<T | null> {
   return res.json().catch(() => null)
@@ -13,6 +14,7 @@ interface AccountUser {
   email: string
   name: string | null
   role: UserRole
+  subscriptionStatus: string | null
 }
 
 interface AdminUser {
@@ -31,6 +33,26 @@ interface MeResponse {
   } | null
 }
 
+function canEditTarget(me: NonNullable<MeResponse["user"]>, target: AdminUser) {
+  if (me.role === "OWNER") return true
+  if (me.role === "ADMIN") {
+    if (me.id === target.id) return true
+    return target.role === "USER"
+  }
+  return false
+}
+
+function canAssignTargetRole(
+  me: NonNullable<MeResponse["user"]>,
+  target: AdminUser,
+  nextRole: UserRole
+) {
+  if (!canEditTarget(me, target)) return false
+  if (me.role === "OWNER") return true
+  if (me.role === "ADMIN") return nextRole === "USER"
+  return false
+}
+
 export function AccountSettings() {
   const [user, setUser] = useState<AccountUser | null>(null)
   const [name, setName] = useState("")
@@ -43,6 +65,8 @@ export function AccountSettings() {
   const [deleting, setDeleting] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [subscribing, setSubscribing] = useState(false)
+  const [subError, setSubError] = useState<string | null>(null)
 
   useEffect(() => {
     let active = true
@@ -130,18 +154,100 @@ export function AccountSettings() {
     window.location.href = "/signup"
   }
 
+  async function onUpgrade() {
+    setSubscribing(true)
+    setSubError(null)
+    try {
+      const res = await fetch("/api/stripe/checkout", { method: "POST" })
+      const json = await readJsonSafely<{ url?: string; error?: string }>(res)
+      if (!res.ok || !json?.url) {
+        setSubError(json?.error ?? "Failed to start checkout")
+        return
+      }
+      window.location.href = json.url
+    } catch {
+      setSubError("Failed to start checkout")
+    } finally {
+      setSubscribing(false)
+    }
+  }
+
+  async function onManageSubscription() {
+    setSubscribing(true)
+    setSubError(null)
+    try {
+      const res = await fetch("/api/stripe/portal", { method: "POST" })
+      const json = await readJsonSafely<{ url?: string; error?: string }>(res)
+      if (!res.ok || !json?.url) {
+        setSubError(json?.error ?? "Failed to open billing portal")
+        return
+      }
+      window.location.href = json.url
+    } catch {
+      setSubError("Failed to open billing portal")
+    } finally {
+      setSubscribing(false)
+    }
+  }
+
   if (!user) {
     return <p className="text-sm text-muted-foreground">Loading account...</p>
   }
 
-  return (
-    <div className="mx-auto max-w-xl rounded-xl border bg-card p-6">
-      <h1 className="text-xl font-semibold">Account settings</h1>
-      <p className="mt-1 text-sm text-muted-foreground">
-        Role: {user.role}
-      </p>
+  const isPro = user.subscriptionStatus === "active"
 
-      <form onSubmit={onSubmit} className="mt-6 space-y-4">
+  return (
+    <div className="mx-auto max-w-xl space-y-6">
+      <div>
+        <div className="flex items-center gap-3">
+          <h1 className="text-3xl font-bold tracking-tight">Account settings</h1>
+          {isPro ? <Badge className="text-xs">PRO</Badge> : null}
+        </div>
+        <div className="mt-2 flex items-center gap-2">
+          <span className="text-muted-foreground">{user.email}</span>
+          <span className="inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold text-muted-foreground">
+            {user.role}
+          </span>
+        </div>
+      </div>
+
+      <div className="rounded-xl border bg-card p-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-lg font-semibold">Subscription</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {isPro
+                ? "You are on the Pro plan."
+                : "Upgrade to Pro to support LeaseLens."}
+            </p>
+          </div>
+          {isPro ? (
+            <Badge variant="outline" className="px-3 py-1 text-sm">
+              Active
+            </Badge>
+          ) : (
+            <Badge variant="secondary" className="px-3 py-1 text-sm">
+              Free
+            </Badge>
+          )}
+        </div>
+        {subError ? <p className="mt-3 text-sm text-destructive">{subError}</p> : null}
+        <div className="mt-4">
+          {isPro ? (
+            <Button variant="outline" onClick={onManageSubscription} disabled={subscribing}>
+              {subscribing ? "Opening portal..." : "Manage subscription"}
+            </Button>
+          ) : (
+            <Button onClick={onUpgrade} disabled={subscribing}>
+              {subscribing ? "Redirecting..." : "Upgrade to Pro"}
+            </Button>
+          )}
+        </div>
+      </div>
+
+      <div className="rounded-xl border bg-card p-6">
+        <h2 className="mb-4 text-lg font-semibold">Profile details</h2>
+        <form onSubmit={onSubmit} className="space-y-4">
         <div className="space-y-1">
           <label htmlFor="email" className="text-sm font-medium">Email</label>
           <input
@@ -196,40 +302,43 @@ export function AccountSettings() {
         <Button type="submit" disabled={loading}>
           {loading ? "Saving..." : "Save changes"}
         </Button>
-      </form>
+        </form>
+      </div>
 
-      <form onSubmit={onDeleteAccount} className="mt-8 space-y-3 rounded-lg border border-destructive/40 p-4">
-        <h2 className="text-sm font-semibold text-destructive">Delete account</h2>
-        <p className="text-xs text-muted-foreground">
-          This permanently deletes your account and all related data.
-        </p>
-        <div className="space-y-1">
-          <label htmlFor="delete-password" className="text-sm font-medium">Current password</label>
-          <input
-            id="delete-password"
-            type="password"
-            value={deletePassword}
-            onChange={(e) => setDeletePassword(e.target.value)}
-            className="h-10 w-full rounded-md border bg-background px-3 text-sm"
-          />
+      <div className="rounded-xl border border-destructive/20 bg-card p-6">
+        <h2 className="mb-4 text-lg font-semibold text-destructive">Danger zone</h2>
+        <form onSubmit={onDeleteAccount} className="space-y-4">
           <p className="text-xs text-muted-foreground">
-            Required for password-based accounts; optional for Google-only accounts.
+            This permanently deletes your account and all related data.
           </p>
-        </div>
-        <div className="space-y-1">
-          <label htmlFor="delete-confirm" className="text-sm font-medium">Type DELETE to confirm</label>
-          <input
-            id="delete-confirm"
-            value={deleteConfirm}
-            onChange={(e) => setDeleteConfirm(e.target.value)}
-            className="h-10 w-full rounded-md border bg-background px-3 text-sm"
-            required
-          />
-        </div>
-        <Button type="submit" variant="destructive" disabled={deleting}>
-          {deleting ? "Deleting..." : "Delete account"}
-        </Button>
-      </form>
+          <div className="space-y-1">
+            <label htmlFor="delete-password" className="text-sm font-medium">Current password</label>
+            <input
+              id="delete-password"
+              type="password"
+              value={deletePassword}
+              onChange={(e) => setDeletePassword(e.target.value)}
+              className="h-10 w-full rounded-md border bg-background px-3 text-sm"
+            />
+            <p className="text-xs text-muted-foreground">
+              Required for password-based accounts; optional for Google-only accounts.
+            </p>
+          </div>
+          <div className="space-y-1">
+            <label htmlFor="delete-confirm" className="text-sm font-medium">Type DELETE to confirm</label>
+            <input
+              id="delete-confirm"
+              value={deleteConfirm}
+              onChange={(e) => setDeleteConfirm(e.target.value)}
+              className="h-10 w-full rounded-md border bg-background px-3 text-sm"
+              required
+            />
+          </div>
+          <Button type="submit" variant="destructive" disabled={deleting}>
+            {deleting ? "Deleting..." : "Delete account"}
+          </Button>
+        </form>
+      </div>
     </div>
   )
 }
@@ -295,18 +404,25 @@ export function AdminUsersPanel() {
 
       <div className="mt-4 space-y-2">
         {users.map((u) => (
-          <div key={u.id} className="grid grid-cols-1 gap-3 rounded-lg border p-3 md:grid-cols-5 md:items-center">
-            <div className="md:col-span-2">
+          <div
+            key={u.id}
+            className="grid grid-cols-1 gap-3 rounded-lg border p-3 md:grid-cols-[minmax(0,2fr)_minmax(110px,0.7fr)_minmax(140px,0.8fr)_auto] md:items-center"
+          >
+            <div className="min-w-0">
               <p className="text-sm font-medium">{u.name ?? "Unnamed user"}</p>
-              <p className="text-xs text-muted-foreground">{u.email}</p>
+              <p className="truncate text-xs text-muted-foreground">{u.email}</p>
             </div>
             <p className="text-xs text-muted-foreground">{u.emailVerified ? "Verified" : "Unverified"}</p>
             <p className="text-xs text-muted-foreground">Current: {u.role}</p>
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2 md:justify-end">
               <Button
                 size="sm"
                 variant="outline"
-                disabled={busyId === u.id}
+                disabled={
+                  busyId === u.id ||
+                  !canAssignTargetRole(me, u, "USER") ||
+                  u.role === "USER"
+                }
                 onClick={() => updateRole(u.id, "USER")}
               >
                 USER
@@ -314,7 +430,11 @@ export function AdminUsersPanel() {
               <Button
                 size="sm"
                 variant="outline"
-                disabled={busyId === u.id || me.role !== "OWNER"}
+                disabled={
+                  busyId === u.id ||
+                  !canAssignTargetRole(me, u, "ADMIN") ||
+                  u.role === "ADMIN"
+                }
                 onClick={() => updateRole(u.id, "ADMIN")}
               >
                 ADMIN
@@ -322,7 +442,11 @@ export function AdminUsersPanel() {
               <Button
                 size="sm"
                 variant="outline"
-                disabled={busyId === u.id || me.role !== "OWNER"}
+                disabled={
+                  busyId === u.id ||
+                  !canAssignTargetRole(me, u, "OWNER") ||
+                  u.role === "OWNER"
+                }
                 onClick={() => updateRole(u.id, "OWNER")}
               >
                 OWNER

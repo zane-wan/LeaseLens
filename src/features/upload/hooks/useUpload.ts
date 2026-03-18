@@ -3,13 +3,20 @@
 import { useState, useCallback } from "react"
 import { UploadState } from "../types"
 
+interface UploadResult {
+  id: string
+  s3Key: string
+}
+
 interface UseUploadReturn {
   uploadState: UploadState
-  upload: (file: File) => Promise<{ id: string; s3Key: string } | null>
+  upload: (file: File) => Promise<UploadResult | null>
+  uploadMany: (files: File[]) => Promise<UploadResult[]>
   reset: () => void
 }
 
 const MAX_SIZE_BYTES = 20 * 1024 * 1024  // 20MB
+const MAX_FILES_PER_BATCH = 10
 
 export function useUpload(): UseUploadReturn {
   const [uploadState, setUploadState] = useState<UploadState>({
@@ -22,7 +29,7 @@ export function useUpload(): UseUploadReturn {
     setUploadState({ status: "idle", progress: 0, errorMessage: null })
   }, [])
 
-  const upload = useCallback(async (file: File) => {
+  const upload = useCallback(async (file: File): Promise<UploadResult | null> => {
     if (file.type !== "application/pdf") {
       setUploadState({ status: "error", progress: 0, errorMessage: "Only PDF files are supported" })
       return null
@@ -32,12 +39,10 @@ export function useUpload(): UseUploadReturn {
       return null
     }
 
-    setUploadState({ status: "uploading", progress: 10, errorMessage: null })
-
     try {
-      // 1. Get presigned URL
+      // 1. Get presigned URL (include fileSize for server-side enforcement)
       const presignedRes = await fetch(
-        `/api/upload/presigned?fileName=${encodeURIComponent(file.name)}&contentType=application/pdf`
+        `/api/upload/presigned?fileName=${encodeURIComponent(file.name)}&contentType=application/pdf&fileSize=${file.size}`
       )
       if (!presignedRes.ok) {
         const err = await presignedRes.json().catch(() => null)
@@ -45,9 +50,7 @@ export function useUpload(): UseUploadReturn {
       }
       const { url, key } = await presignedRes.json()
 
-      setUploadState({ status: "uploading", progress: 30, errorMessage: null })
-
-      // 2. Upload to S3 (mock URL will throw a network error — swallow it in dev)
+      // 2. Upload to S3
       try {
         const uploadRes = await fetch(url, {
           method: "PUT",
@@ -57,10 +60,7 @@ export function useUpload(): UseUploadReturn {
         if (!uploadRes.ok) throw new Error("Upload file failed")
       } catch (s3Err) {
         if (url !== "https://mock-s3.example.com/upload") throw s3Err
-        // Expected: mock URL is unreachable, skip
       }
-
-      setUploadState({ status: "uploading", progress: 80, errorMessage: null })
 
       // 3. Create agreement record
       const agreementRes = await fetch("/api/agreements", {
@@ -74,14 +74,38 @@ export function useUpload(): UseUploadReturn {
       }
       const agreement = await agreementRes.json()
 
-      setUploadState({ status: "success", progress: 100, errorMessage: null })
       return { id: agreement.id, s3Key: key }
     } catch (err) {
-      const message = err instanceof Error ? err.message : "create agreement record failed, please try again"
-      setUploadState({ status: "error", progress: 0, errorMessage: message })
-      return null
+      throw err
     }
   }, [])
 
-  return { uploadState, upload, reset }
+  const uploadMany = useCallback(async (files: File[]): Promise<UploadResult[]> => {
+    if (files.length > MAX_FILES_PER_BATCH) {
+      setUploadState({ status: "error", progress: 0, errorMessage: `You can upload at most ${MAX_FILES_PER_BATCH} files at once` })
+      return []
+    }
+    setUploadState({ status: "uploading", progress: 0, errorMessage: null })
+
+    const results: UploadResult[] = []
+
+    try {
+      for (let i = 0; i < files.length; i++) {
+        const progress = Math.round(((i) / files.length) * 90)
+        setUploadState({ status: "uploading", progress, errorMessage: null })
+
+        const result = await upload(files[i])
+        if (result) results.push(result)
+      }
+
+      setUploadState({ status: "success", progress: 100, errorMessage: null })
+      return results
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Upload failed, please try again"
+      setUploadState({ status: "error", progress: 0, errorMessage: message })
+      return results
+    }
+  }, [upload])
+
+  return { uploadState, upload, uploadMany, reset }
 }

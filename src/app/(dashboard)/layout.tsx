@@ -1,7 +1,4 @@
-import Link from "next/link"
 import { redirect } from "next/navigation"
-import { Button } from "@/components/ui/button"
-import { LogoutButton } from "@/components/auth/LogoutButton"
 import { getAuthUserFromServer } from "@/lib/auth"
 
 export default async function DashboardLayout({
@@ -15,32 +12,11 @@ export default async function DashboardLayout({
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      <header className="border-b">
-        <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-3">
-          <div className="flex items-center gap-3">
-            <Link href="/dashboard" className="text-sm font-semibold">
-              LeaseLens
-            </Link>
-            <span className="text-xs text-muted-foreground">{user.role}</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <Link href="/account">
-              <Button variant="outline" size="sm">Account</Button>
-            </Link>
-            <Link href="/support">
-              <Button variant="outline" size="sm">Support</Button>
-            </Link>
-            {user.role === "ADMIN" || user.role === "OWNER" ? (
-              <Link href="/admin/users">
-                <Button variant="outline" size="sm">Admin</Button>
-              </Link>
-            ) : null}
-            <LogoutButton identifier={user.email} />
-          </div>
-        </div>
-      </header>
-      {children}
+    <div className="relative min-h-screen bg-muted/60 dark:bg-muted/30">
+      <div className="pointer-events-none absolute inset-0 z-0 h-full w-full bg-[radial-gradient(#cbd5e1_1px,transparent_1px)] [background-size:16px_16px] dark:bg-[radial-gradient(#334155_1px,transparent_1px)] opacity-50"></div>
+      <div className="relative z-10 mx-auto max-w-7xl min-h-screen bg-background shadow-sm border-x">
+        {children}
+      </div>
     </div>
   )
 }

@@ -178,7 +178,7 @@ export async function updateOwnAccount(userId: string, input: AccountUpdateInput
     ? await hashPassword(input.newPassword)
     : undefined
 
-  const updated = await prisma.user.update({
+const updated = await prisma.user.update({
     where: { id: userId },
     data: {
       name: input.name,
@@ -194,6 +194,7 @@ export async function updateOwnAccount(userId: string, input: AccountUpdateInput
       email: true,
       name: true,
       role: true,
+      subscriptionStatus: true,
     },
   })
 
