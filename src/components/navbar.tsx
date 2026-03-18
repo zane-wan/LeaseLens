@@ -4,9 +4,19 @@ import { Button } from "@/components/ui/button"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { getAuthUserFromServer } from "@/lib/auth"
 import { LogoutButton } from "@/components/auth/LogoutButton"
+import { prisma } from "@/lib/prisma"
 
 export async function Navbar() {
   const user = await getAuthUserFromServer()
+
+  const subscriptionStatus = user
+    ? (await prisma.user.findUnique({
+        where: { id: user.id },
+        select: { subscriptionStatus: true },
+      }))?.subscriptionStatus ?? null
+    : null
+
+  const isPro = subscriptionStatus === "active"
 
   return (
     <header className="sticky top-0 z-50 flex h-20 w-full shrink-0 items-center border-b bg-background/80 px-6 backdrop-blur-sm md:px-10 lg:px-16">
@@ -32,7 +42,11 @@ export async function Navbar() {
         {user ? (
           <>
             <Link href="/account">
-              <Button variant="outline" size="sm" className="gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                className={`gap-2${isPro ? " pro-glow" : ""}`}
+              >
                 <UserCircle2 className="size-4" />
                 Account
               </Button>

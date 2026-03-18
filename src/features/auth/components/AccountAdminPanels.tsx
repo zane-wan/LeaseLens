@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useState } from "react"
 import type { UserRole } from "@prisma/client"
 import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
 
 async function readJsonSafely<T>(res: Response): Promise<T | null> {
   return res.json().catch(() => null)
@@ -13,6 +14,7 @@ interface AccountUser {
   email: string
   name: string | null
   role: UserRole
+  subscriptionStatus: string | null
 }
 
 interface AdminUser {
@@ -43,6 +45,8 @@ export function AccountSettings() {
   const [deleting, setDeleting] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [subscribing, setSubscribing] = useState(false)
+  const [subError, setSubError] = useState<string | null>(null)
 
   useEffect(() => {
     let active = true
@@ -127,19 +131,92 @@ export function AccountSettings() {
     window.location.href = "/signup"
   }
 
+  async function onUpgrade() {
+    setSubscribing(true)
+    setSubError(null)
+    try {
+      const res = await fetch("/api/stripe/checkout", { method: "POST" })
+      const json = await readJsonSafely<{ url?: string; error?: string }>(res)
+      if (!res.ok || !json?.url) {
+        setSubError(json?.error ?? "Failed to start checkout")
+        return
+      }
+      window.location.href = json.url
+    } catch {
+      setSubError("Failed to start checkout")
+    } finally {
+      setSubscribing(false)
+    }
+  }
+
+  async function onManageSubscription() {
+    setSubscribing(true)
+    setSubError(null)
+    try {
+      const res = await fetch("/api/stripe/portal", { method: "POST" })
+      const json = await readJsonSafely<{ url?: string; error?: string }>(res)
+      if (!res.ok || !json?.url) {
+        setSubError(json?.error ?? "Failed to open billing portal")
+        return
+      }
+      window.location.href = json.url
+    } catch {
+      setSubError("Failed to open billing portal")
+    } finally {
+      setSubscribing(false)
+    }
+  }
+
   if (!user) {
     return <p className="text-sm text-muted-foreground">Loading account...</p>
   }
 
+  const isPro = user.subscriptionStatus === "active"
+
   return (
     <div className="mx-auto max-w-xl space-y-6">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">Account settings</h1>
+        <div className="flex items-center gap-3">
+          <h1 className="text-3xl font-bold tracking-tight">Account settings</h1>
+          {isPro && (
+            <Badge className="text-xs">PRO</Badge>
+          )}
+        </div>
         <div className="mt-2 flex items-center gap-2">
           <span className="text-muted-foreground">{user.email}</span>
           <span className="inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold text-muted-foreground">
             {user.role}
           </span>
+        </div>
+      </div>
+
+      <div className="rounded-xl border bg-card p-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-lg font-semibold">Subscription</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {isPro
+                ? "You are on the Pro plan."
+                : "Upgrade to Pro to support LeaseLens."}
+            </p>
+          </div>
+          {isPro ? (
+            <Badge variant="outline" className="text-sm px-3 py-1">Active</Badge>
+          ) : (
+            <Badge variant="secondary" className="text-sm px-3 py-1">Free</Badge>
+          )}
+        </div>
+        {subError ? <p className="mt-3 text-sm text-destructive">{subError}</p> : null}
+        <div className="mt-4">
+          {isPro ? (
+            <Button variant="outline" onClick={onManageSubscription} disabled={subscribing}>
+              {subscribing ? "Opening portal..." : "Manage subscription"}
+            </Button>
+          ) : (
+            <Button onClick={onUpgrade} disabled={subscribing}>
+              {subscribing ? "Redirecting..." : "Upgrade to Pro"}
+            </Button>
+          )}
         </div>
       </div>
 
