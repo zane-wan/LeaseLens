@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { AuthError, requireAuthFromRequest } from "@/lib/auth"
-import { stripe } from "@/lib/stripe"
+import { getStripe } from "@/lib/stripe"
 import { prisma } from "@/lib/prisma"
 
 export async function POST(req: NextRequest) {
@@ -28,7 +28,7 @@ export async function POST(req: NextRequest) {
     let customerId = dbUser.stripeCustomerId
 
     if (!customerId) {
-      const customer = await stripe.customers.create({
+      const customer = await getStripe().customers.create({
         email: dbUser.email,
         name: dbUser.name ?? undefined,
         metadata: { userId: user.id },
@@ -41,7 +41,7 @@ export async function POST(req: NextRequest) {
       })
     }
 
-    const session = await stripe.checkout.sessions.create({
+    const session = await getStripe().checkout.sessions.create({
       customer: customerId,
       mode: "subscription",
       line_items: [{ price: priceId, quantity: 1 }],
