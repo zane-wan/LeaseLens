@@ -223,13 +223,13 @@ export default function ChatPage() {
                 </div>
               )}
               <Card
-                className={`max-w-[85%] ${
+                className={`max-w-[85%] py-0 ${
                   m.role === "user"
                     ? "bg-primary text-primary-foreground"
                     : "bg-muted/50"
                 }`}
               >
-                <CardContent className="px-3 py-2">
+                <CardContent className="px-3 py-1.5">
                   {m.role === "assistant" ? (
                     <div className="prose prose-sm dark:prose-invert max-w-none [&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
                       <ReactMarkdown>{m.content}</ReactMarkdown>
@@ -252,8 +252,8 @@ export default function ChatPage() {
               <div className="flex size-7 shrink-0 items-center justify-center rounded-full bg-primary/10">
                 <Bot className="size-4 text-primary" />
               </div>
-              <Card className="bg-muted/50">
-                <CardContent className="px-3 py-2">
+              <Card className="bg-muted/50 py-0">
+                <CardContent className="px-3 py-1.5">
                   <Loader2 className="size-4 animate-spin text-muted-foreground" />
                 </CardContent>
               </Card>

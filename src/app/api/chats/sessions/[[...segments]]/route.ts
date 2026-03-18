@@ -76,6 +76,40 @@ async function getLatestSession(req: NextRequest) {
   return NextResponse.json(session)
 }
 
+async function getSessionById(req: NextRequest, sessionId: string) {
+  const user = await requireAuthFromRequest(req)
+  const session = await prisma.chatSession.findFirst({
+    where: { id: sessionId, userId: user.id },
+    include: {
+      agreements: {
+        include: {
+          analysis: {
+            include: {
+              clauseResults: { orderBy: { clauseIndex: "asc" } },
+            },
+          },
+        },
+      },
+      messages: {
+        orderBy: { createdAt: "asc" },
+        select: {
+          id: true,
+          role: true,
+          content: true,
+          citations: true,
+          createdAt: true,
+        },
+      },
+    },
+  })
+
+  if (!session) {
+    return NextResponse.json({ error: "Session not found" }, { status: 404 })
+  }
+
+  return NextResponse.json(session)
+}
+
 async function createChatSession(req: NextRequest) {
   const user = await requireAuthFromRequest(req)
   const body = await req.json()
@@ -338,6 +372,9 @@ export async function GET(
     }
     if (segments.length === 1 && segments[0] === "latest") {
       return await getLatestSession(req)
+    }
+    if (segments.length === 1) {
+      return await getSessionById(req, segments[0])
     }
     if (segments.length === 2 && segments[1] === "messages") {
       return await listMessages(req, segments[0])

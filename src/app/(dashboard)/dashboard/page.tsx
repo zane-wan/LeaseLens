@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from "react"
 import { useChat, type Message } from "ai/react"
 import ReactMarkdown from "react-markdown"
-import { Button } from "@/components/ui/button"
+import { Button, buttonVariants } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent } from "@/components/ui/card"
 import { DropZone } from "@/features/upload/components/DropZone"
@@ -12,7 +12,16 @@ import { useUpload } from "@/features/upload/hooks/useUpload"
 import { AgreementItem } from "@/features/upload/types"
 import { ClauseCard, type ClauseResultData } from "@/features/analysis/components/ClauseCard"
 import { RiskScoreRing } from "@/features/analysis/components/RiskScoreRing"
-import { Send, Loader2, Bot, User as UserIcon, RotateCcw } from "lucide-react"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import { Send, Loader2, Bot, User as UserIcon, RotateCcw, History, FileText } from "lucide-react"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -36,6 +45,14 @@ interface SessionMessage {
   createdAt: string
 }
 
+interface SessionListItem {
+  id: string
+  title: string
+  agreements: { id: string; fileName: string }[]
+  createdAt: string
+  updatedAt: string
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function DashboardPage() {
@@ -47,6 +64,8 @@ export default function DashboardPage() {
   const [initialLoading, setInitialLoading] = useState(true)
   const [pageError, setPageError] = useState<string | null>(null)
   const [analyzeTriggered, setAnalyzeTriggered] = useState(false)
+  const [pastSessions, setPastSessions] = useState<SessionListItem[]>([])
+  const [loadingSessions, setLoadingSessions] = useState(false)
   const creatingSession = useRef(false)
 
   // ── Init: try session restore, then load unlinked agreements ──
@@ -192,6 +211,47 @@ export default function DashboardPage() {
     else setAgreements([])
   }
 
+  async function fetchPastSessions() {
+    if (loadingSessions) return
+    setLoadingSessions(true)
+    try {
+      const res = await fetch("/api/chats/sessions")
+      if (res.ok) {
+        const all: SessionListItem[] = await res.json()
+        setPastSessions(all.slice(0, 5))
+      }
+    } catch {
+      // silently fail — dropdown just stays empty
+    } finally {
+      setLoadingSessions(false)
+    }
+  }
+
+  async function handleLoadSession(id: string) {
+    setPageError(null)
+    try {
+      const res = await fetch(`/api/chats/sessions/${id}`)
+      if (!res.ok) throw new Error("Failed to load session")
+      const session = await res.json()
+      setSessionId(session.id)
+      setSessionAgreements(session.agreements)
+      setInitialMessages(
+        session.messages
+          .filter((m: SessionMessage) => m.role !== "SYSTEM")
+          .map((m: SessionMessage) => ({
+            id: m.id,
+            role: m.role === "USER" ? ("user" as const) : ("assistant" as const),
+            content: m.content,
+            createdAt: new Date(m.createdAt),
+          })),
+      )
+      setAnalyzeTriggered(false)
+      creatingSession.current = false
+    } catch {
+      setPageError("Failed to load session")
+    }
+  }
+
   // ── Loading ──
 
   if (initialLoading) {
@@ -210,12 +270,50 @@ export default function DashboardPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">My Agreements</h1>
-        {sessionId && (
-          <Button variant="outline" size="sm" className="gap-2" onClick={handleNewSession}>
-            <RotateCcw className="size-3" />
-            New Session
-          </Button>
-        )}
+        <div className="flex items-center gap-2">
+          <DropdownMenu onOpenChange={(open) => { if (open) fetchPastSessions() }}>
+            <DropdownMenuTrigger className={buttonVariants({ variant: "outline", size: "sm", className: "gap-2" })}>
+              <History className="size-3" />
+              Past Sessions
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-72">
+              <DropdownMenuGroup>
+              <DropdownMenuLabel>Recent Sessions</DropdownMenuLabel>
+              </DropdownMenuGroup>
+              <DropdownMenuSeparator />
+              {loadingSessions && (
+                <div className="flex items-center justify-center py-3">
+                  <Loader2 className="size-4 animate-spin text-muted-foreground" />
+                </div>
+              )}
+              {!loadingSessions && pastSessions.length === 0 && (
+                <p className="px-2 py-3 text-sm text-muted-foreground text-center">No past sessions</p>
+              )}
+              {!loadingSessions && pastSessions.map((s) => (
+                <DropdownMenuItem
+                  key={s.id}
+                  className="cursor-pointer flex flex-col items-start gap-1 py-2"
+                  disabled={s.id === sessionId}
+                  onClick={() => handleLoadSession(s.id)}
+                >
+                  <span className="font-medium text-sm truncate w-full">{s.title}</span>
+                  <span className="text-xs text-muted-foreground flex items-center gap-1">
+                    <FileText className="size-3" />
+                    {s.agreements.length} file{s.agreements.length !== 1 ? "s" : ""}
+                    <span className="mx-1">·</span>
+                    {new Date(s.updatedAt).toLocaleDateString()}
+                  </span>
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+          {sessionId && (
+            <Button variant="outline" size="sm" className="gap-2" onClick={handleNewSession}>
+              <RotateCcw className="size-3" />
+              New Session
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* ── Upload Phase (no session yet) ── */}
@@ -381,8 +479,8 @@ function ChatSection({ sessionId, initialMessages }: { sessionId: string; initia
                 <Bot className="size-4 text-primary" />
               </div>
             )}
-            <Card className={`max-w-[85%] ${m.role === "user" ? "bg-primary text-primary-foreground" : "bg-muted/50"}`}>
-              <CardContent className="px-3 py-2">
+            <Card className={`max-w-[85%] py-0 ${m.role === "user" ? "bg-primary text-primary-foreground" : "bg-muted/50"}`}>
+              <CardContent className="px-3 py-1.5">
                 {m.role === "assistant" ? (
                   <div className="prose prose-sm dark:prose-invert max-w-none [&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
                     <ReactMarkdown>{m.content}</ReactMarkdown>
