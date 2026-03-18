@@ -1,9 +1,13 @@
 import OpenAI from "openai"
 
-const openai = new OpenAI()
+let _openai: OpenAI | null = null
+function getOpenAI() {
+  if (!_openai) _openai = new OpenAI()
+  return _openai
+}
 
 export async function embedText(text: string): Promise<number[]> {
-  const response = await openai.embeddings.create({
+  const response = await getOpenAI().embeddings.create({
     model: "text-embedding-3-small",
     input: text,
   })
@@ -11,7 +15,7 @@ export async function embedText(text: string): Promise<number[]> {
 }
 
 export async function embedTexts(texts: string[]): Promise<number[][]> {
-  const response = await openai.embeddings.create({
+  const response = await getOpenAI().embeddings.create({
     model: "text-embedding-3-small",
     input: texts,
   })
