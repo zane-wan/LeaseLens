@@ -29,6 +29,7 @@ jobs:
           git config --global --add safe.directory /home/ec2-user/LeaseLens
           cd /home/ec2-user/LeaseLens
           git pull origin main
+          chown -R ec2-user:ec2-user /home/ec2-user/LeaseLens
           SCRIPT_END
 
           # Append .env.local creation with actual secret values

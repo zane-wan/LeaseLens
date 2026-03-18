@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import Stripe from "stripe"
-import { stripe } from "@/lib/stripe"
+import { getStripe } from "@/lib/stripe"
 import { prisma } from "@/lib/prisma"
 
 // Disable body parsing so we receive the raw bytes Stripe needs for signature verification.
@@ -25,7 +25,7 @@ export async function POST(req: NextRequest) {
   const rawBody = await req.text()
 
   try {
-    event = stripe.webhooks.constructEvent(rawBody, sig, webhookSecret)
+    event = getStripe().webhooks.constructEvent(rawBody, sig, webhookSecret)
   } catch (err) {
     console.error("[stripe/webhook] Signature verification failed:", err)
     return NextResponse.json({ error: "Invalid signature" }, { status: 400 })
@@ -40,7 +40,7 @@ export async function POST(req: NextRequest) {
         const customerId = session.customer as string
         const subscriptionId = session.subscription as string
 
-        const subscription = await stripe.subscriptions.retrieve(subscriptionId)
+        const subscription = await getStripe().subscriptions.retrieve(subscriptionId)
         const priceId = subscription.items.data[0]?.price.id ?? null
 
         await prisma.user.update({

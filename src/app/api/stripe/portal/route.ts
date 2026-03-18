@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { AuthError, requireAuthFromRequest } from "@/lib/auth"
-import { stripe } from "@/lib/stripe"
+import { getStripe } from "@/lib/stripe"
 import { prisma } from "@/lib/prisma"
 
 export async function POST(req: NextRequest) {
@@ -21,7 +21,7 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    const session = await stripe.billingPortal.sessions.create({
+    const session = await getStripe().billingPortal.sessions.create({
       customer: dbUser.stripeCustomerId,
       return_url: `${appUrl}/account`,
     })
