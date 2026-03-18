@@ -1,0 +1,40 @@
+# Dependencies & build output (installed/built inside Docker)
+node_modules
+.next
+
+# Version control
+.git
+.gitignore
+
+# Environment files (secrets — passed via docker-compose env_file)
+.env*
+
+# Documentation & guides (not needed at runtime)
+docs/
+*.md
+
+# Editor / IDE configs
+.vscode
+.idea
+.claude
+.cursor
+.DS_Store
+
+# Docker files (no need to copy themselves into the image)
+Dockerfile
+docker-compose.yml
+
+# Test files
+vitest.config.*
+__tests__
+*.test.*
+*.spec.*
+test-s3-upload.ts
+
+# Dev-only data & scripts
+data/
+scripts/
+postman/
+
+# Build artifacts
+tsconfig.tsbuildinfo

@@ -46,7 +46,8 @@ async function createThread(req: NextRequest) {
   const body = await req.json()
   const parsed = threadSchema.safeParse(body)
   if (!parsed.success) {
-    return NextResponse.json({ error: "Invalid payload" }, { status: 400 })
+    const errorMsg = parsed.error.issues.map(i => `${i.path.join('.')}: ${i.message}`).join(', ')
+    return NextResponse.json({ error: `Invalid payload: ${errorMsg}` }, { status: 400 })
   }
 
   const supportInbox = process.env.SUPPORT_INBOX_EMAIL ?? "support@leaselens.local"
@@ -117,7 +118,8 @@ async function createThreadMessage(req: NextRequest, threadId: string) {
   const body = await req.json()
   const parsed = messageSchema.safeParse(body)
   if (!parsed.success) {
-    return NextResponse.json({ error: "Invalid payload" }, { status: 400 })
+    const errorMsg = parsed.error.issues.map(i => `${i.path.join('.')}: ${i.message}`).join(', ')
+    return NextResponse.json({ error: `Invalid payload: ${errorMsg}` }, { status: 400 })
   }
 
   const thread = await prisma.supportThread.findUnique({

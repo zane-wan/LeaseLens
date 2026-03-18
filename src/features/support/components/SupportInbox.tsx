@@ -137,6 +137,8 @@ export function SupportInbox() {
             onChange={(e) => setSubject(e.target.value)}
             placeholder="Subject"
             required
+            minLength={3}
+            maxLength={180}
             className="h-9 w-full rounded-md border bg-background px-3 text-sm"
           />
           <textarea
@@ -151,17 +153,23 @@ export function SupportInbox() {
       </section>
 
       <section className="space-y-3 rounded-xl border p-4 md:col-span-2">
-        <h2 className="text-lg font-semibold">Conversation</h2>
+        <div className="space-y-1">
+          <h2 className="text-lg font-semibold">Conversation</h2>
+          {activeThreadId && (
+            <p className="text-sm font-medium text-muted-foreground whitespace-pre-wrap">
+              Subject: {threads.find(t => t.id === activeThreadId)?.subject}
+            </p>
+          )}
+        </div>
         {error ? <p className="text-sm text-destructive">{error}</p> : null}
 
         <div className="space-y-2">
           {messages.map((m) => (
             <article key={m.id} className="rounded-md border p-3">
-              <p className="text-xs text-muted-foreground">
+              <p className="text-xs text-muted-foreground mb-1">
                 {m.senderRole} • {m.direction} • {new Date(m.createdAt).toLocaleString()}
               </p>
-              <p className="text-sm font-medium">{m.subject}</p>
-              <p className="text-sm">{m.body}</p>
+              <p className="text-sm whitespace-pre-wrap">{m.body}</p>
             </article>
           ))}
           {messages.length === 0 ? (
