@@ -25,6 +25,7 @@ jobs:
           cat > /tmp/deploy.sh << 'SCRIPT_END'
           #!/bin/bash
           set -e
+          export HOME=/root
           git config --global --add safe.directory /home/ec2-user/LeaseLens
           cd /home/ec2-user/LeaseLens
           git pull origin main
