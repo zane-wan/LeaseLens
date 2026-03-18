@@ -53,7 +53,7 @@ function canAssignTargetRole(
   return false
 }
 
-export function AccountSettings() {
+export function AccountSettings({ initialStatus }: { initialStatus?: string }) {
   const [user, setUser] = useState<AccountUser | null>(null)
   const [name, setName] = useState("")
   const [email, setEmail] = useState("")
@@ -66,7 +66,16 @@ export function AccountSettings() {
   const [message, setMessage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [subscribing, setSubscribing] = useState(false)
+  const [subMessage, setSubMessage] = useState<string | null>(null)
   const [subError, setSubError] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (initialStatus === "success") {
+      setSubMessage("Subscription updated successfully!")
+    } else if (initialStatus === "canceled") {
+      setSubError("Subscription checkout was canceled.")
+    }
+  }, [initialStatus])
 
   useEffect(() => {
     let active = true
@@ -232,6 +241,7 @@ export function AccountSettings() {
           )}
         </div>
         {subError ? <p className="mt-3 text-sm text-destructive">{subError}</p> : null}
+        {subMessage ? <p className="mt-3 text-sm text-green-600">{subMessage}</p> : null}
         <div className="mt-4">
           {isPro ? (
             <Button variant="outline" onClick={onManageSubscription} disabled={subscribing}>
