@@ -23,7 +23,8 @@ export function DropZone({ uploadState, onFilesDrop, onReset }: DropZoneProps) {
     onDrop,
     accept: { "application/pdf": [".pdf"] },
     disabled: uploadState.status === "uploading",
-    multiple: false,
+    multiple: true,
+    maxFiles: 10,
     maxSize: 20 * 1024 * 1024, // 20 MB
   })
 
@@ -40,8 +41,8 @@ export function DropZone({ uploadState, onFilesDrop, onReset }: DropZoneProps) {
         <input {...getInputProps()} />
         {uploadState.status === "idle" && (
           <div className="text-muted-foreground">
-            <p>{isDragActive ? "Release to upload" : "Drag and drop a PDF file, or click to select"}</p>
-            <p className="text-xs mt-1">Max 20 MB per file</p>
+            <p>{isDragActive ? "Release to upload" : "Drag and drop PDF files, or click to select"}</p>
+            <p className="text-xs mt-1">Up to 10 files, max 20 MB each</p>
           </div>
         )}
         {uploadState.status === "uploading" && (
