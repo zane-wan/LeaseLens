@@ -41,3 +41,5 @@ docs/
 
 # Database dumps
 data/rta-chunks.sql
+
+files/
