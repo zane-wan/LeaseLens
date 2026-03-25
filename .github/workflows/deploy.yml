@@ -50,7 +50,9 @@ jobs:
           STRIPE_PRO_PRICE_ID=${STRIPE_PRO_PRICE_ID}
           STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET}
           EMAIL_MODE=ses
-          AWS_SES_FROM_EMAIL=noreply@leaselens.website
+          SUPPORT_FROM_EMAIL=noreply@leaselens.website
+          SMTP_USER=${SMTP_USER}
+          SMTP_PASS=${SMTP_PASS}
           ENVEOF
           EOF
 
@@ -124,3 +126,5 @@ jobs:
           STRIPE_PUBLISHABLE_KEY: ${{ secrets.STRIPE_PUBLISHABLE_KEY }}
           STRIPE_PRO_PRICE_ID: ${{ secrets.STRIPE_PRO_PRICE_ID }}
           STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASS: ${{ secrets.SMTP_PASS }}
