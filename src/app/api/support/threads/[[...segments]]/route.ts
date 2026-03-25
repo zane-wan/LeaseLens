@@ -76,6 +76,27 @@ async function createThread(req: NextRequest) {
     },
   })
 
+  const submitter = actor.name?.trim() ? `${actor.name} <${actor.email}>` : actor.email
+  try {
+    await sendEmail({
+      to: supportInbox,
+      subject: `New support request: ${parsed.data.subject}`,
+      text: [
+        `A new support thread was created in LeaseLens.`,
+        ``,
+        `From: ${submitter}`,
+        `Role: ${actor.role}`,
+        `Thread ID: ${thread.id}`,
+        `Subject: ${parsed.data.subject}`,
+        ``,
+        parsed.data.body,
+      ].join("\n"),
+      replyTo: actor.email,
+    })
+  } catch (error) {
+    console.error("Failed to notify support inbox about new thread", error)
+  }
+
   return NextResponse.json(thread, { status: 201 })
 }
 
@@ -175,11 +196,28 @@ async function createThreadMessage(req: NextRequest, threadId: string) {
     },
   })
 
-  await sendEmail({
-    to: recipientEmail,
-    subject,
-    text: parsed.data.body,
-  })
+  const replyTo = isStaff ? (process.env.SUPPORT_INBOX_EMAIL ?? undefined) : actor.email
+  const submitter = actor.name?.trim() ? `${actor.name} <${actor.email}>` : actor.email
+
+  try {
+    await sendEmail({
+      to: recipientEmail,
+      subject,
+      text: isStaff
+        ? parsed.data.body
+        : [
+            `LeaseLens support message from ${submitter}`,
+            ``,
+            `Thread ID: ${thread.id}`,
+            `Subject: ${subject}`,
+            ``,
+            parsed.data.body,
+          ].join("\n"),
+      replyTo,
+    })
+  } catch (error) {
+    console.error("Failed to deliver support email notification", error)
+  }
 
   return NextResponse.json(message, { status: 201 })
 }
