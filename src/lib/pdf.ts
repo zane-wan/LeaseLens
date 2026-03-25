@@ -3,6 +3,10 @@ import { getS3Object } from "@/lib/s3"
 // ---------------------------------------------------------------------------
 // Polyfill browser APIs that pdfjs-dist expects but are absent in Node.js.
 // We only use pdf.js for text extraction (not rendering), so stubs suffice.
+//
+// IMPORTANT: These must run BEFORE pdf-parse is imported, so we use dynamic
+// import() below. ES module static imports are hoisted above all other code,
+// which would cause pdfjs-dist to initialize before polyfills are in place.
 // ---------------------------------------------------------------------------
 if (typeof globalThis.DOMMatrix === "undefined") {
   // @ts-expect-error — minimal stub, not a full implementation
@@ -54,16 +58,13 @@ if (typeof globalThis.ImageData === "undefined") {
   };
 }
 
-import { PDFParse } from "pdf-parse"
-
 /**
  * Fetch a PDF from S3 by key (using IAM credentials) and extract plain text.
- * pdf-parse v2 wraps pdf.js's getDocument(), which accepts { data: Uint8Array }.
- * Node.js Buffer extends Uint8Array, so it can be passed directly.
+ * Uses dynamic import() so polyfills above are guaranteed to run first.
  */
 export async function extractPdfText(s3Key: string): Promise<string> {
+  const { PDFParse } = await import("pdf-parse")
   const buffer = await getS3Object(s3Key)
-  // Pass buffer as `data` — pdf.js's getDocument() recognizes this key
   const parser = new PDFParse({ data: buffer, verbosity: -1 })
   const result = await parser.getText() as { text: string }
   return result.text
