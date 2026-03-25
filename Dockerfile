@@ -28,6 +28,11 @@ COPY --from=builder /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 
+# pdf-parse is dynamically imported, so Next.js standalone tracing misses it.
+# Copy the package and its pdfjs-dist dependency manually.
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules/pdf-parse ./node_modules/pdf-parse
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules/pdfjs-dist ./node_modules/pdfjs-dist
+
 USER nextjs
 
 EXPOSE 3000
