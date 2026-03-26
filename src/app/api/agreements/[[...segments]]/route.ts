@@ -2,10 +2,12 @@ import { NextRequest, NextResponse } from "next/server"
 import { z } from "zod"
 import { AuthError, requireAuthFromRequest } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { deleteS3Object } from "@/lib/s3"
 
 const createSchema = z.object({
   fileName: z.string().min(1),
   s3Key: z.string().min(1),
+  sessionId: z.string().min(1).optional(),
 })
 
 async function listAgreements(req: NextRequest) {
@@ -31,12 +33,53 @@ async function createAgreement(req: NextRequest) {
     return NextResponse.json({ error: "Invalid body" }, { status: 400 })
   }
 
-  const agreement = await prisma.agreement.create({
-    data: {
-      userId: user.id,
-      fileName: parsed.data.fileName,
-      s3Key: parsed.data.s3Key,
-    },
+  const agreement = await prisma.$transaction(async (tx) => {
+    if (parsed.data.sessionId) {
+      const session = await tx.chatSession.findFirst({
+        where: {
+          id: parsed.data.sessionId,
+          userId: user.id,
+        },
+        select: {
+          id: true,
+          agreements: {
+            select: { id: true },
+          },
+        },
+      })
+
+      if (!session) {
+        throw new AuthError("Session not found", 404)
+      }
+
+      if (session.agreements.length > 0) {
+        throw new AuthError("This session already has an uploaded file", 409)
+      }
+    }
+
+    const created = await tx.agreement.create({
+      data: {
+        userId: user.id,
+        fileName: parsed.data.fileName,
+        s3Key: parsed.data.s3Key,
+        chatSessions: parsed.data.sessionId
+          ? {
+              connect: [{ id: parsed.data.sessionId }],
+            }
+          : undefined,
+      },
+    })
+
+    if (parsed.data.sessionId) {
+      await tx.chatSession.update({
+        where: { id: parsed.data.sessionId },
+        data: {
+          title: parsed.data.fileName,
+        },
+      })
+    }
+
+    return created
   })
 
   return NextResponse.json(agreement, { status: 201 })
@@ -44,7 +87,15 @@ async function createAgreement(req: NextRequest) {
 
 async function deleteAgreement(req: NextRequest, id: string) {
   const user = await requireAuthFromRequest(req)
-  const agreement = await prisma.agreement.findUnique({ where: { id } })
+  const agreement = await prisma.agreement.findUnique({
+    where: { id },
+    include: {
+      chatSessions: {
+        where: { userId: user.id },
+        select: { id: true },
+      },
+    },
+  })
 
   if (!agreement) {
     return NextResponse.json({ error: "Not found" }, { status: 404 })
@@ -53,7 +104,27 @@ async function deleteAgreement(req: NextRequest, id: string) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 })
   }
 
-  await prisma.agreement.delete({ where: { id } })
+  try {
+    await deleteS3Object(agreement.s3Key)
+  } catch (error) {
+    console.error("Failed to delete agreement file from S3", error)
+  }
+
+  await prisma.$transaction(async (tx) => {
+    await tx.agreement.delete({ where: { id } })
+
+    if (agreement.chatSessions.length > 0) {
+      await tx.chatSession.updateMany({
+        where: {
+          id: { in: agreement.chatSessions.map((session) => session.id) },
+        },
+        data: {
+          title: "New Session",
+        },
+      })
+    }
+  })
+
   return new NextResponse(null, { status: 204 })
 }
 

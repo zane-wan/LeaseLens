@@ -10,8 +10,8 @@ interface UploadResult {
 
 interface UseUploadReturn {
   uploadState: UploadState
-  upload: (file: File) => Promise<UploadResult | null>
-  uploadMany: (files: File[]) => Promise<UploadResult[]>
+  upload: (file: File, sessionId?: string) => Promise<UploadResult | null>
+  uploadMany: (files: File[], sessionId?: string) => Promise<UploadResult[]>
   reset: () => void
 }
 
@@ -29,7 +29,7 @@ export function useUpload(): UseUploadReturn {
     setUploadState({ status: "idle", progress: 0, errorMessage: null })
   }, [])
 
-  const upload = useCallback(async (file: File): Promise<UploadResult | null> => {
+  const upload = useCallback(async (file: File, sessionId?: string): Promise<UploadResult | null> => {
     if (file.type !== "application/pdf") {
       setUploadState({ status: "error", progress: 0, errorMessage: "Only PDF files are supported" })
       return null
@@ -66,7 +66,7 @@ export function useUpload(): UseUploadReturn {
       const agreementRes = await fetch("/api/agreements", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ fileName: file.name, s3Key: key }),
+        body: JSON.stringify({ fileName: file.name, s3Key: key, sessionId }),
       })
       if (!agreementRes.ok) {
         const err = await agreementRes.json().catch(() => null)
@@ -80,7 +80,7 @@ export function useUpload(): UseUploadReturn {
     }
   }, [])
 
-  const uploadMany = useCallback(async (files: File[]): Promise<UploadResult[]> => {
+  const uploadMany = useCallback(async (files: File[], sessionId?: string): Promise<UploadResult[]> => {
     if (files.length > MAX_FILES_PER_BATCH) {
       setUploadState({ status: "error", progress: 0, errorMessage: `You can upload at most ${MAX_FILES_PER_BATCH} files at once` })
       return []
@@ -94,7 +94,7 @@ export function useUpload(): UseUploadReturn {
         const progress = Math.round(((i) / files.length) * 90)
         setUploadState({ status: "uploading", progress, errorMessage: null })
 
-        const result = await upload(files[i])
+        const result = await upload(files[i], sessionId)
         if (result) results.push(result)
       }
 

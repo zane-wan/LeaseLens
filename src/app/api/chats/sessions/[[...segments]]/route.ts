@@ -5,10 +5,11 @@ import { prisma } from "@/lib/prisma"
 import { streamText } from "ai"
 import { modelConfig, systemPrompts } from "@/config/llm"
 import { retrieveContext } from "@/lib/rag"
+import { deleteS3Object } from "@/lib/s3"
 
 const sessionSchema = z.object({
-  title: z.string().trim().min(1).max(120),
-  agreementIds: z.array(z.string().min(1)).optional(),
+  title: z.string().trim().min(1).max(120).optional(),
+  agreementIds: z.array(z.string().min(1)).max(1).optional(),
 })
 
 const messageSchema = z.object({
@@ -33,7 +34,7 @@ async function listSessions(req: NextRequest) {
     select: {
       id: true,
       title: true,
-      agreements: { select: { id: true, fileName: true } },
+      agreements: { select: { id: true, fileName: true, status: true } },
       createdAt: true,
       updatedAt: true,
     },
@@ -132,10 +133,12 @@ async function createChatSession(req: NextRequest) {
     }
   }
 
+  const title = parsed.data.title?.trim() || "New Session"
+
   const session = await prisma.chatSession.create({
     data: {
       userId: user.id,
-      title: parsed.data.title,
+      title,
       agreements: parsed.data.agreementIds?.length
         ? { connect: parsed.data.agreementIds.map((id) => ({ id })) }
         : undefined,
@@ -143,13 +146,63 @@ async function createChatSession(req: NextRequest) {
     select: {
       id: true,
       title: true,
-      agreements: { select: { id: true, fileName: true } },
+      agreements: { select: { id: true, fileName: true, status: true } },
       createdAt: true,
       updatedAt: true,
     },
   })
 
   return NextResponse.json(session, { status: 201 })
+}
+
+async function deleteSession(req: NextRequest, sessionId: string) {
+  const user = await requireAuthFromRequest(req)
+  const session = await prisma.chatSession.findFirst({
+    where: {
+      id: sessionId,
+      userId: user.id,
+    },
+    select: {
+      id: true,
+      agreements: {
+        select: {
+          id: true,
+          s3Key: true,
+        },
+      },
+    },
+  })
+
+  if (!session) {
+    return NextResponse.json({ error: "Session not found" }, { status: 404 })
+  }
+
+  for (const agreement of session.agreements) {
+    try {
+      await deleteS3Object(agreement.s3Key)
+    } catch (error) {
+      console.error("Failed to delete session file from S3", error)
+    }
+  }
+
+  await prisma.$transaction(async (tx) => {
+    if (session.agreements.length > 0) {
+      await tx.agreement.deleteMany({
+        where: {
+          id: {
+            in: session.agreements.map((agreement) => agreement.id),
+          },
+          userId: user.id,
+        },
+      })
+    }
+
+    await tx.chatSession.delete({
+      where: { id: session.id },
+    })
+  })
+
+  return new NextResponse(null, { status: 204 })
 }
 
 // ---------------------------------------------------------------------------
@@ -409,5 +462,23 @@ export async function POST(
       return NextResponse.json({ error: err.message }, { status: err.status })
     }
     return NextResponse.json({ error: "Failed to process request" }, { status: 500 })
+  }
+}
+
+export async function DELETE(
+  req: NextRequest,
+  { params }: { params: Promise<{ segments?: string[] }> },
+) {
+  try {
+    const { segments = [] } = await params
+    if (segments.length === 1) {
+      return await deleteSession(req, segments[0])
+    }
+    return NextResponse.json({ error: "Not found" }, { status: 404 })
+  } catch (err) {
+    if (err instanceof AuthError) {
+      return NextResponse.json({ error: err.message }, { status: err.status })
+    }
+    return NextResponse.json({ error: "Failed to delete session" }, { status: 500 })
   }
 }

@@ -1,4 +1,4 @@
-import { S3Client, PutObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3"
+import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3"
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner"
 
 let _s3: S3Client | null = null
@@ -43,4 +43,22 @@ export async function getS3Object(key: string): Promise<Buffer> {
     chunks.push(chunk)
   }
   return Buffer.concat(chunks)
+}
+
+export async function deleteS3Object(key: string): Promise<void> {
+  const region = process.env.AWS_REGION
+  const bucket = process.env.AWS_S3_BUCKET
+  const accessKeyId = process.env.AWS_ACCESS_KEY_ID
+  const secretAccessKey = process.env.AWS_SECRET_ACCESS_KEY
+
+  if (!region || !bucket || !accessKeyId || !secretAccessKey) {
+    return
+  }
+
+  const command = new DeleteObjectCommand({
+    Bucket: bucket,
+    Key: key,
+  })
+
+  await getS3Client().send(command)
 }

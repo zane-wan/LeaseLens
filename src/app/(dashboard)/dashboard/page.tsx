@@ -3,15 +3,9 @@
 import { useState, useEffect, useRef, useCallback } from "react"
 import { useChat, type Message } from "ai/react"
 import ReactMarkdown from "react-markdown"
-import { Button, buttonVariants } from "@/components/ui/button"
+import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent } from "@/components/ui/card"
-import { DropZone } from "@/features/upload/components/DropZone"
-import { AgreementList } from "@/features/upload/components/AgreementList"
-import { useUpload } from "@/features/upload/hooks/useUpload"
-import { AgreementItem } from "@/features/upload/types"
-import { ClauseCard, type ClauseResultData } from "@/features/analysis/components/ClauseCard"
-import { RiskScoreRing } from "@/features/analysis/components/RiskScoreRing"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -21,9 +15,24 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { Send, Loader2, Bot, User as UserIcon, RotateCcw, History, FileText } from "lucide-react"
-
-// ─── Types ────────────────────────────────────────────────────────────────────
+import { DropZone } from "@/features/upload/components/DropZone"
+import { AgreementList } from "@/features/upload/components/AgreementList"
+import { useUpload } from "@/features/upload/hooks/useUpload"
+import { AgreementItem } from "@/features/upload/types"
+import { ClauseCard, type ClauseResultData } from "@/features/analysis/components/ClauseCard"
+import { RiskScoreRing } from "@/features/analysis/components/RiskScoreRing"
+import {
+  Bot,
+  ChevronDown,
+  FileText,
+  History,
+  Loader2,
+  MessageSquarePlus,
+  Plus,
+  Send,
+  Trash2,
+  User as UserIcon,
+} from "lucide-react"
 
 interface SessionAnalysis {
   status: string
@@ -32,9 +41,7 @@ interface SessionAnalysis {
   clauseResults: ClauseResultData[]
 }
 
-interface SessionAgreement {
-  id: string
-  fileName: string
+interface SessionAgreement extends AgreementItem {
   analysis: SessionAnalysis | null
 }
 
@@ -48,124 +55,197 @@ interface SessionMessage {
 interface SessionListItem {
   id: string
   title: string
-  agreements: { id: string; fileName: string }[]
+  agreements: { id: string; fileName: string; status: string }[]
   createdAt: string
   updatedAt: string
 }
 
-// ─── Main Page ────────────────────────────────────────────────────────────────
+interface SessionDetail {
+  id: string
+  title: string
+  agreements: SessionAgreement[]
+  messages: SessionMessage[]
+  createdAt: string
+  updatedAt: string
+}
+
+function toChatMessages(messages: SessionMessage[]): Message[] {
+  return messages
+    .filter((message) => message.role !== "SYSTEM")
+    .map((message) => ({
+      id: message.id,
+      role: message.role === "USER" ? ("user" as const) : ("assistant" as const),
+      content: message.content,
+      createdAt: new Date(message.createdAt),
+    }))
+}
 
 export default function DashboardPage() {
-  const { uploadState, uploadMany, reset } = useUpload()
-  const [agreements, setAgreements] = useState<AgreementItem[]>([])
-  const [sessionId, setSessionId] = useState<string | null>(null)
-  const [sessionAgreements, setSessionAgreements] = useState<SessionAgreement[]>([])
+  const { uploadState, upload, reset } = useUpload()
+  const [sessions, setSessions] = useState<SessionListItem[]>([])
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(null)
+  const [activeSession, setActiveSession] = useState<SessionDetail | null>(null)
   const [initialMessages, setInitialMessages] = useState<Message[]>([])
   const [initialLoading, setInitialLoading] = useState(true)
+  const [loadingSession, setLoadingSession] = useState(false)
   const [pageError, setPageError] = useState<string | null>(null)
-  const [analyzeTriggered, setAnalyzeTriggered] = useState(false)
-  const [pastSessions, setPastSessions] = useState<SessionListItem[]>([])
-  const [loadingSessions, setLoadingSessions] = useState(false)
-  const creatingSession = useRef(false)
+  const [creatingSession, setCreatingSession] = useState(false)
+  const [busySessionId, setBusySessionId] = useState<string | null>(null)
 
-  // ── Init: try session restore, then load unlinked agreements ──
+  const activeAgreement = activeSession?.agreements[0] ?? null
+
+  const fetchSessions = useCallback(async () => {
+    const res = await fetch("/api/chats/sessions")
+    if (!res.ok) {
+      throw new Error("Failed to load sessions")
+    }
+    const json = (await res.json()) as SessionListItem[]
+    setSessions(json)
+    return json
+  }, [])
+
+  const loadSession = useCallback(async (sessionId: string) => {
+    setLoadingSession(true)
+    const res = await fetch(`/api/chats/sessions/${sessionId}`)
+    if (!res.ok) {
+      setLoadingSession(false)
+      throw new Error("Failed to load session")
+    }
+
+    const session = (await res.json()) as SessionDetail
+    setActiveSessionId(session.id)
+    setActiveSession(session)
+    setInitialMessages(toChatMessages(session.messages))
+    setLoadingSession(false)
+    return session
+  }, [])
+
+  const syncSessions = useCallback(
+    async (preferredSessionId?: string | null) => {
+      const list = await fetchSessions()
+      const nextSessionId =
+        preferredSessionId && list.some((session) => session.id === preferredSessionId)
+          ? preferredSessionId
+          : list[0]?.id ?? null
+
+      if (!nextSessionId) {
+        setActiveSessionId(null)
+        setActiveSession(null)
+        setInitialMessages([])
+        return
+      }
+
+      await loadSession(nextSessionId)
+    },
+    [fetchSessions, loadSession]
+  )
+
   useEffect(() => {
     async function init() {
       try {
-        const sessionRes = await fetch("/api/chats/sessions/latest")
-        if (sessionRes.ok) {
-          const session = await sessionRes.json()
-          setSessionId(session.id)
-          setSessionAgreements(session.agreements)
-          setInitialMessages(
-            session.messages
-              .filter((m: SessionMessage) => m.role !== "SYSTEM")
-              .map((m: SessionMessage) => ({
-                id: m.id,
-                role: m.role === "USER" ? ("user" as const) : ("assistant" as const),
-                content: m.content,
-                createdAt: new Date(m.createdAt),
-              })),
-          )
-        } else {
-          const agRes = await fetch("/api/agreements")
-          if (agRes.ok) setAgreements(await agRes.json())
-        }
+        await syncSessions()
       } catch {
-        setPageError("Failed to load data")
+        setPageError("Failed to load sessions")
       } finally {
         setInitialLoading(false)
       }
     }
+
     init()
-  }, [])
+  }, [syncSessions])
 
-  const fetchAgreements = useCallback(async () => {
-    const res = await fetch("/api/agreements")
-    if (res.ok) setAgreements(await res.json())
-  }, [])
-
-  // ── Poll while any agreement is PROCESSING ──
   useEffect(() => {
-    if (sessionId) return
-    const hasProcessing = agreements.some((a) => a.status === "PROCESSING")
-    if (!hasProcessing) return
-    const timer = setInterval(fetchAgreements, 3000)
+    if (!activeSessionId || activeAgreement?.status !== "PROCESSING") return
+
+    const timer = setInterval(() => {
+      void Promise.all([fetchSessions(), loadSession(activeSessionId)]).catch(() => null)
+    }, 3000)
+
     return () => clearInterval(timer)
-  }, [agreements, fetchAgreements, sessionId])
+  }, [activeAgreement?.status, activeSessionId, fetchSessions, loadSession])
 
-  // ── Auto-create session when all analyses finish ──
-  useEffect(() => {
-    if (!analyzeTriggered || sessionId || agreements.length === 0 || creatingSession.current) return
-    const allDone = agreements.every((a) => a.status === "COMPLETED" || a.status === "FAILED")
-    const anyCompleted = agreements.some((a) => a.status === "COMPLETED")
-    if (!allDone || !anyCompleted) return
+  async function handleCreateSession() {
+    setCreatingSession(true)
+    setPageError(null)
 
-    creatingSession.current = true
-    const completedIds = agreements.filter((a) => a.status === "COMPLETED").map((a) => a.id)
-
-    fetch("/api/chats/sessions", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title: "Lease Review", agreementIds: completedIds }),
-    })
-      .then((res) => {
-        if (!res.ok) throw new Error("Failed to create session")
-        return fetch("/api/chats/sessions/latest")
+    try {
+      const res = await fetch("/api/chats/sessions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: "New Session" }),
       })
-      .then((res) => {
-        if (!res.ok) throw new Error("Failed to load session")
-        return res.json()
-      })
-      .then((session) => {
-        setSessionId(session.id)
-        setSessionAgreements(session.agreements)
-        setInitialMessages([])
-      })
-      .catch(() => {
-        setPageError("Failed to create chat session")
-        creatingSession.current = false
-      })
-  }, [agreements, analyzeTriggered, sessionId])
+      if (!res.ok) {
+        throw new Error("Failed to create session")
+      }
 
-  // ── Handlers ──
-
-  async function handleFilesDrop(files: File[]) {
-    const results = await uploadMany(files)
-    if (results.length > 0) fetchAgreements()
+      const session = (await res.json()) as SessionListItem
+      reset()
+      await syncSessions(session.id)
+    } catch {
+      setPageError("Failed to create session")
+    } finally {
+      setCreatingSession(false)
+    }
   }
 
-  async function handleAnalyzeAll() {
-    const pending = agreements.filter((a) => a.status === "PENDING")
-    if (pending.length === 0) return
-    setAnalyzeTriggered(true)
+  async function handleSelectSession(sessionId: string) {
     setPageError(null)
-    await Promise.all(
-      pending.map((a) =>
-        fetch(`/api/agreements/${a.id}/analyze`, { method: "POST" }).catch(() => null),
-      ),
-    )
-    fetchAgreements()
+
+    try {
+      await loadSession(sessionId)
+    } catch {
+      setPageError("Failed to load session")
+    }
+  }
+
+  async function handleDeleteSession(sessionId: string) {
+    const confirmed = window.confirm("Delete this session and its uploaded file?")
+    if (!confirmed) return
+
+    setBusySessionId(sessionId)
+    setPageError(null)
+
+    try {
+      const res = await fetch(`/api/chats/sessions/${sessionId}`, { method: "DELETE" })
+      if (!res.ok) {
+        const json = await res.json().catch(() => null)
+        throw new Error(json?.error ?? "Failed to delete session")
+      }
+
+      const nextPreferred = activeSessionId === sessionId ? null : activeSessionId
+      reset()
+      await syncSessions(nextPreferred)
+    } catch (error) {
+      setPageError(error instanceof Error ? error.message : "Failed to delete session")
+    } finally {
+      setBusySessionId(null)
+    }
+  }
+
+  async function handleFilesDrop(files: File[]) {
+    if (!activeSessionId) {
+      setPageError("Create or select a session first")
+      return
+    }
+    if (files.length !== 1) {
+      setPageError("Each session can only contain one PDF file")
+      return
+    }
+    if (activeAgreement) {
+      setPageError("This session already has a file. Create a new session to upload another lease.")
+      return
+    }
+
+    setPageError(null)
+
+    try {
+      const result = await upload(files[0], activeSessionId)
+      if (!result) return
+      reset()
+      await syncSessions(activeSessionId)
+    } catch (error) {
+      setPageError(error instanceof Error ? error.message : "Upload failed")
+    }
   }
 
   async function handleAnalyze(id: string) {
@@ -175,8 +255,9 @@ export default function DashboardPage() {
       setPageError(err?.error ?? "Failed to start analysis")
       return
     }
-    setAnalyzeTriggered(true)
-    fetchAgreements()
+    if (activeSessionId) {
+      await syncSessions(activeSessionId)
+    }
   }
 
   async function handleCancel(id: string) {
@@ -186,73 +267,23 @@ export default function DashboardPage() {
       setPageError(err?.error ?? "Failed to cancel")
       return
     }
-    fetchAgreements()
+    if (activeSessionId) {
+      await syncSessions(activeSessionId)
+    }
   }
 
-  async function handleDelete(id: string) {
+  async function handleDeleteAgreement(id: string) {
     const res = await fetch(`/api/agreements/${id}`, { method: "DELETE" })
     if (!res.ok) {
       const err = await res.json().catch(() => null)
-      setPageError(err?.error ?? "Failed to delete")
+      setPageError(err?.error ?? "Failed to delete file")
       return
     }
-    fetchAgreements()
-  }
-
-  async function handleNewSession() {
-    setSessionId(null)
-    setSessionAgreements([])
-    setInitialMessages([])
-    setAnalyzeTriggered(false)
-    setPageError(null)
-    creatingSession.current = false
-    const res = await fetch("/api/agreements")
-    if (res.ok) setAgreements(await res.json())
-    else setAgreements([])
-  }
-
-  async function fetchPastSessions() {
-    if (loadingSessions) return
-    setLoadingSessions(true)
-    try {
-      const res = await fetch("/api/chats/sessions")
-      if (res.ok) {
-        const all: SessionListItem[] = await res.json()
-        setPastSessions(all.slice(0, 5))
-      }
-    } catch {
-      // silently fail — dropdown just stays empty
-    } finally {
-      setLoadingSessions(false)
+    reset()
+    if (activeSessionId) {
+      await syncSessions(activeSessionId)
     }
   }
-
-  async function handleLoadSession(id: string) {
-    setPageError(null)
-    try {
-      const res = await fetch(`/api/chats/sessions/${id}`)
-      if (!res.ok) throw new Error("Failed to load session")
-      const session = await res.json()
-      setSessionId(session.id)
-      setSessionAgreements(session.agreements)
-      setInitialMessages(
-        session.messages
-          .filter((m: SessionMessage) => m.role !== "SYSTEM")
-          .map((m: SessionMessage) => ({
-            id: m.id,
-            role: m.role === "USER" ? ("user" as const) : ("assistant" as const),
-            content: m.content,
-            createdAt: new Date(m.createdAt),
-          })),
-      )
-      setAnalyzeTriggered(false)
-      creatingSession.current = false
-    } catch {
-      setPageError("Failed to load session")
-    }
-  }
-
-  // ── Loading ──
 
   if (initialLoading) {
     return (
@@ -262,166 +293,261 @@ export default function DashboardPage() {
     )
   }
 
-  const hasPending = agreements.some((a) => a.status === "PENDING")
-  const hasProcessing = agreements.some((a) => a.status === "PROCESSING")
-
   return (
-    <main className="max-w-4xl mx-auto px-4 py-10 space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">My Agreements</h1>
+    <main className="mx-auto max-w-5xl space-y-6 px-4 py-8">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold">Lease Sessions</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            One session can hold zero or one lease file.
+          </p>
+        </div>
         <div className="flex items-center gap-2">
-          <DropdownMenu onOpenChange={(open) => { if (open) fetchPastSessions() }}>
-            <DropdownMenuTrigger className={buttonVariants({ variant: "outline", size: "sm", className: "gap-2" })}>
-              <History className="size-3" />
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              className="inline-flex h-8 items-center gap-2 rounded-lg border bg-background px-3 text-sm font-medium hover:bg-muted"
+            >
+              <History className="size-4" />
               Past Sessions
+              <ChevronDown className="size-4 text-muted-foreground" />
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-72">
+            <DropdownMenuContent align="end" className="w-80 min-w-80">
               <DropdownMenuGroup>
-              <DropdownMenuLabel>Recent Sessions</DropdownMenuLabel>
+                <DropdownMenuLabel>Session Manager</DropdownMenuLabel>
               </DropdownMenuGroup>
+              <DropdownMenuItem
+                onClick={handleCreateSession}
+                disabled={creatingSession}
+                className="gap-2"
+              >
+                {creatingSession ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />}
+                New Session
+              </DropdownMenuItem>
               <DropdownMenuSeparator />
-              {loadingSessions && (
-                <div className="flex items-center justify-center py-3">
-                  <Loader2 className="size-4 animate-spin text-muted-foreground" />
+              {sessions.length === 0 ? (
+                <div className="px-2 py-3 text-sm text-muted-foreground">
+                  No sessions yet.
+                </div>
+              ) : (
+                <div className="space-y-1">
+                  {sessions.map((session) => {
+                    const sessionAgreement = session.agreements[0]
+                    const isActive = session.id === activeSessionId
+
+                    return (
+                      <div
+                        key={session.id}
+                        className={`flex items-center gap-2 rounded-md px-2 py-2 ${
+                          isActive ? "bg-muted" : ""
+                        }`}
+                      >
+                        <button
+                          type="button"
+                          onClick={() => handleSelectSession(session.id)}
+                          className="min-w-0 flex-1 text-left"
+                        >
+                          <p className="truncate text-sm font-medium">{session.title}</p>
+                          <p className="truncate text-xs text-muted-foreground">
+                            {sessionAgreement ? sessionAgreement.fileName : "No file uploaded"}
+                          </p>
+                        </button>
+                        <Button
+                          type="button"
+                          size="icon-xs"
+                          variant="ghost"
+                          disabled={busySessionId === session.id}
+                          onClick={() => handleDeleteSession(session.id)}
+                        >
+                          {busySessionId === session.id ? (
+                            <Loader2 className="size-3 animate-spin" />
+                          ) : (
+                            <Trash2 className="size-3" />
+                          )}
+                        </Button>
+                      </div>
+                    )
+                  })}
                 </div>
               )}
-              {!loadingSessions && pastSessions.length === 0 && (
-                <p className="px-2 py-3 text-sm text-muted-foreground text-center">No past sessions</p>
-              )}
-              {!loadingSessions && pastSessions.map((s) => (
-                <DropdownMenuItem
-                  key={s.id}
-                  className="cursor-pointer flex flex-col items-start gap-1 py-2"
-                  disabled={s.id === sessionId}
-                  onClick={() => handleLoadSession(s.id)}
-                >
-                  <span className="font-medium text-sm truncate w-full">{s.title}</span>
-                  <span className="text-xs text-muted-foreground flex items-center gap-1">
-                    <FileText className="size-3" />
-                    {s.agreements.length} file{s.agreements.length !== 1 ? "s" : ""}
-                    <span className="mx-1">·</span>
-                    {new Date(s.updatedAt).toLocaleDateString()}
-                  </span>
-                </DropdownMenuItem>
-              ))}
             </DropdownMenuContent>
           </DropdownMenu>
-          {sessionId && (
-            <Button variant="outline" size="sm" className="gap-2" onClick={handleNewSession}>
-              <RotateCcw className="size-3" />
-              New Session
-            </Button>
-          )}
+
+          <Button
+            type="button"
+            size="sm"
+            className="gap-1"
+            onClick={handleCreateSession}
+            disabled={creatingSession}
+          >
+            {creatingSession ? <Loader2 className="size-3 animate-spin" /> : <Plus className="size-3" />}
+            New Session
+          </Button>
         </div>
       </div>
 
-      {/* ── Upload Phase (no session yet) ── */}
-      {!sessionId && (
-        <>
-          <DropZone uploadState={uploadState} onFilesDrop={handleFilesDrop} onReset={reset} />
+      <section className="space-y-6">
+        {pageError ? <p className="text-sm text-destructive">{pageError}</p> : null}
 
-          <AgreementList
-            agreements={agreements}
-            onAnalyze={handleAnalyze}
-            onCancel={handleCancel}
-            onDelete={handleDelete}
-          />
-
-          {/* Analyze All */}
-          {hasPending && (
-            <Button onClick={handleAnalyzeAll} className="w-full" disabled={hasProcessing}>
-              {hasProcessing ? (
-                <>
-                  <Loader2 className="size-4 mr-2 animate-spin" />
-                  Analyzing...
-                </>
-              ) : (
-                "Analyze All"
-              )}
+        {!activeSessionId ? (
+          <div className="rounded-2xl border border-dashed p-10 text-center">
+            <MessageSquarePlus className="mx-auto size-10 text-muted-foreground" />
+            <h2 className="mt-4 text-lg font-semibold">Create a session to begin</h2>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Each session behaves like an individual lease workspace and can hold zero or one file.
+            </p>
+            <Button type="button" className="mt-4 gap-2" onClick={handleCreateSession} disabled={creatingSession}>
+              <Plus className="size-4" />
+              New Session
             </Button>
-          )}
-
-          {/* Analyzing spinner (all triggered, waiting) */}
-          {!hasPending && hasProcessing && (
-            <div className="flex items-center justify-center gap-2 text-muted-foreground py-4">
-              <Loader2 className="size-4 animate-spin" />
-              <span className="text-sm">Analyzing your leases...</span>
-            </div>
-          )}
-        </>
-      )}
-
-      {pageError && <p className="text-sm text-destructive">{pageError}</p>}
-
-      {/* ── Analysis Results (session exists) ── */}
-      {sessionId && sessionAgreements.length > 0 && (
-        <div className="space-y-6">
-          <h2 className="text-lg font-semibold border-b pb-2">Analysis Results</h2>
-          {sessionAgreements.map((ag) => (
-            <div key={ag.id} className="space-y-3">
-              <h3 className="font-medium">{ag.fileName}</h3>
-
-              {ag.analysis?.status === "COMPLETED" ? (
-                <div className="space-y-3">
-                  {/* Summary card */}
-                  <Card className="p-4">
-                    <div className="flex items-center gap-6">
-                      <RiskScoreRing score={ag.analysis.riskScore ?? 0} size={80} />
-                      <div className="flex-1 space-y-2">
-                        <div className="flex gap-4 text-center">
-                          <div>
-                            <p className="text-lg font-bold text-green-500">
-                              {ag.analysis.clauseResults.filter((c) => c.compliance === "COMPLIANT").length}
-                            </p>
-                            <p className="text-xs text-muted-foreground">Compliant</p>
-                          </div>
-                          <div>
-                            <p className="text-lg font-bold text-amber-500">
-                              {ag.analysis.clauseResults.filter((c) => c.compliance === "NEEDS_REVIEW").length}
-                            </p>
-                            <p className="text-xs text-muted-foreground">Review</p>
-                          </div>
-                          <div>
-                            <p className="text-lg font-bold text-red-500">
-                              {ag.analysis.clauseResults.filter((c) => c.compliance === "NON_COMPLIANT").length}
-                            </p>
-                            <p className="text-xs text-muted-foreground">Non-compliant</p>
-                          </div>
-                        </div>
-                        {ag.analysis.overallSummary && (
-                          <p className="text-sm text-muted-foreground">{ag.analysis.overallSummary}</p>
-                        )}
-                      </div>
-                    </div>
-                  </Card>
-
-                  {/* Clause cards */}
-                  {ag.analysis.clauseResults.map((r) => (
-                    <ClauseCard key={r.id} result={r} />
-                  ))}
-                </div>
-              ) : (
-                <Card className="p-4">
-                  <p className="text-sm text-muted-foreground">
-                    {ag.analysis?.status === "FAILED"
-                      ? "Analysis failed for this file."
-                      : "No analysis available."}
+          </div>
+        ) : loadingSession ? (
+          <div className="flex min-h-64 items-center justify-center rounded-2xl border">
+            <Loader2 className="size-6 animate-spin text-muted-foreground" />
+          </div>
+        ) : (
+          <>
+            <div className="rounded-2xl border bg-card p-6">
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div>
+                  <h2 className="text-2xl font-bold">{activeSession?.title ?? "New Session"}</h2>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    {activeAgreement
+                      ? `Current file: ${activeAgreement.fileName}`
+                      : "This session is empty. Upload one PDF to attach it to this session."}
                   </p>
-                </Card>
-              )}
+                </div>
+                {activeSession ? (
+                  <p className="text-xs text-muted-foreground">
+                    Updated {new Date(activeSession.updatedAt).toLocaleString()}
+                  </p>
+                ) : null}
+              </div>
             </div>
-          ))}
-        </div>
-      )}
 
-      {/* ── Chat (session exists) ── */}
-      {sessionId && <ChatSection sessionId={sessionId} initialMessages={initialMessages} />}
+            {!activeAgreement ? (
+              <div className="space-y-4 rounded-2xl border bg-card p-6">
+                <div>
+                  <h3 className="text-lg font-semibold">Upload Lease</h3>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    This workspace accepts one PDF. Create another session for another lease.
+                  </p>
+                </div>
+                <DropZone
+                  uploadState={uploadState}
+                  onFilesDrop={handleFilesDrop}
+                  onReset={reset}
+                  multiple={false}
+                  maxFiles={1}
+                />
+              </div>
+            ) : (
+              <>
+                <div className="rounded-2xl border bg-card p-6">
+                  <div className="mb-4 flex items-center gap-2">
+                    <FileText className="size-4 text-muted-foreground" />
+                    <h3 className="text-lg font-semibold">Lease File</h3>
+                  </div>
+                  <AgreementList
+                    agreements={[activeAgreement]}
+                    onAnalyze={handleAnalyze}
+                    onCancel={handleCancel}
+                    onDelete={handleDeleteAgreement}
+                  />
+                </div>
+
+                <AnalysisSection agreement={activeAgreement} />
+
+                <ChatSection
+                  key={activeSessionId}
+                  sessionId={activeSessionId}
+                  initialMessages={initialMessages}
+                />
+              </>
+            )}
+          </>
+        )}
+      </section>
     </main>
   )
 }
 
-// ─── Chat Section ─────────────────────────────────────────────────────────────
+function AnalysisSection({ agreement }: { agreement: SessionAgreement }) {
+  if (agreement.analysis?.status === "COMPLETED") {
+    return (
+      <div className="space-y-6">
+        <h2 className="border-b pb-2 text-lg font-semibold">Analysis Results</h2>
+
+        <Card className="p-4">
+          <div className="flex items-center gap-6">
+            <RiskScoreRing score={agreement.analysis.riskScore ?? 0} size={80} />
+            <div className="flex-1 space-y-2">
+              <div className="flex gap-4 text-center">
+                <div>
+                  <p className="text-lg font-bold text-green-500">
+                    {agreement.analysis.clauseResults.filter((item) => item.compliance === "COMPLIANT").length}
+                  </p>
+                  <p className="text-xs text-muted-foreground">Compliant</p>
+                </div>
+                <div>
+                  <p className="text-lg font-bold text-amber-500">
+                    {agreement.analysis.clauseResults.filter((item) => item.compliance === "NEEDS_REVIEW").length}
+                  </p>
+                  <p className="text-xs text-muted-foreground">Review</p>
+                </div>
+                <div>
+                  <p className="text-lg font-bold text-red-500">
+                    {agreement.analysis.clauseResults.filter((item) => item.compliance === "NON_COMPLIANT").length}
+                  </p>
+                  <p className="text-xs text-muted-foreground">Non-compliant</p>
+                </div>
+              </div>
+              {agreement.analysis.overallSummary ? (
+                <p className="text-sm text-muted-foreground">{agreement.analysis.overallSummary}</p>
+              ) : null}
+            </div>
+          </div>
+        </Card>
+
+        {agreement.analysis.clauseResults.map((result) => (
+          <ClauseCard key={result.id} result={result} />
+        ))}
+      </div>
+    )
+  }
+
+  if (agreement.status === "PROCESSING" || agreement.analysis?.status === "PROCESSING") {
+    return (
+      <Card className="p-6">
+        <div className="flex items-center gap-3 text-muted-foreground">
+          <Loader2 className="size-4 animate-spin" />
+          <p className="text-sm">Analysis is running for this session.</p>
+        </div>
+      </Card>
+    )
+  }
+
+  if (agreement.status === "PENDING" || agreement.analysis?.status === "QUEUED") {
+    return (
+      <Card className="p-6">
+        <p className="text-sm text-muted-foreground">
+          The file is uploaded but not analyzed yet. Use the file menu above to start analysis.
+        </p>
+      </Card>
+    )
+  }
+
+  if (agreement.status === "FAILED" || agreement.analysis?.status === "FAILED") {
+    return (
+      <Card className="p-6">
+        <p className="text-sm text-muted-foreground">
+          Analysis failed for this lease. Retry analysis from the file menu.
+        </p>
+      </Card>
+    )
+  }
+
+  return null
+}
 
 function ChatSection({ sessionId, initialMessages }: { sessionId: string; initialMessages: Message[] }) {
   const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -432,7 +558,7 @@ function ChatSection({ sessionId, initialMessages }: { sessionId: string; initia
   })
 
   useEffect(() => {
-    if (!initialized.current && initialMessages.length > 0) {
+    if (!initialized.current) {
       setMessages(initialMessages)
       initialized.current = true
     }
@@ -444,61 +570,70 @@ function ChatSection({ sessionId, initialMessages }: { sessionId: string; initia
 
   return (
     <div className="space-y-4">
-      <h2 className="text-lg font-semibold border-b pb-2">Chat</h2>
+      <h2 className="border-b pb-2 text-lg font-semibold">Chat</h2>
 
-      {/* Suggested starters */}
-      {messages.length === 0 && (
-        <div className="text-center space-y-3 py-4">
-          <p className="text-sm text-muted-foreground">Ask a question about your lease to get started.</p>
+      {messages.length === 0 ? (
+        <div className="space-y-3 py-4 text-center">
+          <p className="text-sm text-muted-foreground">Ask a question about this lease to get started.</p>
           <div className="flex flex-wrap justify-center gap-2">
             {[
               "Is the no-pets clause enforceable?",
               "Can my landlord increase rent mid-lease?",
               "What are my rights regarding entry notice?",
-            ].map((q) => (
+            ].map((question) => (
               <button
-                key={q}
-                className="rounded-lg border bg-background px-3 py-2 text-xs hover:bg-muted transition-colors"
+                key={question}
+                className="rounded-lg border bg-background px-3 py-2 text-xs transition-colors hover:bg-muted"
                 onClick={() =>
-                  handleInputChange({ target: { value: q } } as React.ChangeEvent<HTMLInputElement>)
+                  handleInputChange({
+                    target: { value: question },
+                  } as React.ChangeEvent<HTMLInputElement>)
                 }
               >
-                {q}
+                {question}
               </button>
             ))}
           </div>
         </div>
-      )}
+      ) : null}
 
-      {/* Messages */}
       <div className="space-y-3">
-        {messages.map((m) => (
-          <div key={m.id} className={`flex gap-3 ${m.role === "user" ? "justify-end" : "justify-start"}`}>
-            {m.role === "assistant" && (
+        {messages.map((message) => (
+          <div
+            key={message.id}
+            className={`flex gap-3 ${message.role === "user" ? "justify-end" : "justify-start"}`}
+          >
+            {message.role === "assistant" ? (
               <div className="flex size-7 shrink-0 items-center justify-center rounded-full bg-primary/10">
                 <Bot className="size-4 text-primary" />
               </div>
-            )}
-            <Card className={`max-w-[85%] py-0 ${m.role === "user" ? "bg-primary text-primary-foreground" : "bg-muted/50"}`}>
+            ) : null}
+
+            <Card
+              className={`max-w-[85%] py-0 ${
+                message.role === "user" ? "bg-primary text-primary-foreground" : "bg-muted/50"
+              }`}
+            >
               <CardContent className="px-3 py-1.5">
-                {m.role === "assistant" ? (
+                {message.role === "assistant" ? (
                   <div className="prose prose-sm dark:prose-invert max-w-none [&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
-                    <ReactMarkdown>{m.content}</ReactMarkdown>
+                    <ReactMarkdown>{message.content}</ReactMarkdown>
                   </div>
                 ) : (
-                  <p className="text-sm">{m.content}</p>
+                  <p className="text-sm">{message.content}</p>
                 )}
               </CardContent>
             </Card>
-            {m.role === "user" && (
+
+            {message.role === "user" ? (
               <div className="flex size-7 shrink-0 items-center justify-center rounded-full bg-muted">
                 <UserIcon className="size-4 text-muted-foreground" />
               </div>
-            )}
+            ) : null}
           </div>
         ))}
 
-        {isLoading && messages[messages.length - 1]?.role !== "assistant" && (
+        {isLoading && messages[messages.length - 1]?.role !== "assistant" ? (
           <div className="flex gap-3">
             <div className="flex size-7 shrink-0 items-center justify-center rounded-full bg-primary/10">
               <Bot className="size-4 text-primary" />
@@ -509,22 +644,20 @@ function ChatSection({ sessionId, initialMessages }: { sessionId: string; initia
               </CardContent>
             </Card>
           </div>
-        )}
+        ) : null}
 
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Input */}
       <form onSubmit={handleSubmit} className="flex items-center gap-2">
         <Input
           value={input}
           onChange={handleInputChange}
-          placeholder="Ask about your lease..."
-          disabled={isLoading}
-          className="flex-1"
+          placeholder="Ask about this lease..."
+          className="h-11"
         />
-        <Button type="submit" size="sm" disabled={isLoading || !input.trim()}>
-          <Send className="size-4" />
+        <Button type="submit" size="lg" disabled={isLoading || !input.trim()}>
+          {isLoading ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
         </Button>
       </form>
     </div>
