@@ -4,7 +4,7 @@ import { z } from "zod"
 import { AuthError, requireAuthFromRequest } from "@/lib/auth"
 import { hashPassword, validateStrongPassword } from "@/lib/password"
 import { prisma } from "@/lib/prisma"
-import { canAssignRole, canManageAccount, isAdminLike } from "@/lib/rbac"
+import { canAssignRole, canDeleteManagedAccount, canManageAccount, isAdminLike } from "@/lib/rbac"
 
 const updateSchema = z.object({
   name: z.string().trim().min(1).max(80).optional(),
@@ -121,6 +121,41 @@ async function updateUser(req: NextRequest, id: string) {
   return NextResponse.json({ user })
 }
 
+async function deleteUser(req: NextRequest, id: string) {
+  const actor = await requireAuthFromRequest(req)
+  if (!isAdminLike(actor.role)) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+  }
+
+  const target = await prisma.user.findUnique({
+    where: { id },
+    select: {
+      id: true,
+      role: true,
+    },
+  })
+  if (!target) {
+    return NextResponse.json({ error: "User not found" }, { status: 404 })
+  }
+
+  if (!canDeleteManagedAccount(actor.role, actor.id, target.role, target.id)) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+  }
+
+  if (target.role === "OWNER") {
+    const count = await ownerCount()
+    if (count <= 1) {
+      return NextResponse.json({ error: "Cannot remove the last owner" }, { status: 400 })
+    }
+  }
+
+  await prisma.user.delete({
+    where: { id: target.id },
+  })
+
+  return NextResponse.json({ ok: true })
+}
+
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ segments?: string[] }> }
@@ -154,5 +189,23 @@ export async function PATCH(
       return NextResponse.json({ error: err.message }, { status: err.status })
     }
     return NextResponse.json({ error: "Failed to update user" }, { status: 500 })
+  }
+}
+
+export async function DELETE(
+  req: NextRequest,
+  { params }: { params: Promise<{ segments?: string[] }> }
+) {
+  try {
+    const { segments = [] } = await params
+    if (segments.length !== 1) {
+      return NextResponse.json({ error: "Not found" }, { status: 404 })
+    }
+    return await deleteUser(req, segments[0])
+  } catch (err) {
+    if (err instanceof AuthError) {
+      return NextResponse.json({ error: err.message }, { status: err.status })
+    }
+    return NextResponse.json({ error: "Failed to delete user" }, { status: 500 })
   }
 }

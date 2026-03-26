@@ -53,6 +53,16 @@ function canAssignTargetRole(
   return false
 }
 
+function canDeleteTarget(me: NonNullable<MeResponse["user"]>, target: AdminUser) {
+  if (me.role === "OWNER") {
+    return me.id !== target.id
+  }
+  if (me.role === "ADMIN") {
+    return me.id !== target.id && target.role === "USER"
+  }
+  return false
+}
+
 export function AccountSettings({ initialStatus }: { initialStatus?: string }) {
   const [user, setUser] = useState<AccountUser | null>(null)
   const [name, setName] = useState("")
@@ -399,6 +409,24 @@ export function AdminUsersPanel() {
     await load()
   }
 
+  async function deleteUser(userId: string, email: string) {
+    const confirmed = window.confirm(`Delete account ${email}? This cannot be undone.`)
+    if (!confirmed) return
+
+    setBusyId(userId)
+    setError(null)
+    const res = await fetch(`/api/admin/users/${userId}`, {
+      method: "DELETE",
+    })
+    setBusyId(null)
+    if (!res.ok) {
+      const json = await readJsonSafely<{ error?: string }>(res)
+      setError(json?.error ?? "Failed to delete user")
+      return
+    }
+    await load()
+  }
+
   if (!me) {
     return <p className="text-sm text-muted-foreground">Loading admin users...</p>
   }
@@ -407,7 +435,7 @@ export function AdminUsersPanel() {
     <div className="rounded-xl border bg-card p-6">
       <h1 className="text-xl font-semibold">User administration</h1>
       <p className="mt-1 text-sm text-muted-foreground">
-        Owners can manage all users. Administrators can manage normal users.
+        Owners can manage all users except deleting their own owner account. Administrators can manage and delete normal users.
       </p>
 
       {error ? <p className="mt-3 text-sm text-destructive">{error}</p> : null}
@@ -460,6 +488,14 @@ export function AdminUsersPanel() {
                 onClick={() => updateRole(u.id, "OWNER")}
               >
                 OWNER
+              </Button>
+              <Button
+                size="sm"
+                variant="destructive"
+                disabled={busyId === u.id || !canDeleteTarget(me, u)}
+                onClick={() => deleteUser(u.id, u.email)}
+              >
+                DELETE
               </Button>
             </div>
           </div>

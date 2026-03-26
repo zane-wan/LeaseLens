@@ -1,6 +1,6 @@
 "use client"
 
-import { FormEvent, useEffect, useState } from "react"
+import { FormEvent, useEffect, useMemo, useState } from "react"
 import { Button } from "@/components/ui/button"
 
 interface ThreadItem {
@@ -25,7 +25,20 @@ interface MessageItem {
   createdAt: string
 }
 
+interface MeResponse {
+  user: {
+    id: string
+    email: string
+    role: "OWNER" | "ADMIN" | "USER"
+  } | null
+}
+
+function getThreadStatusLabel(status: ThreadItem["status"]) {
+  return status === "CLOSED" ? "Resolved" : "Unresolved"
+}
+
 export function SupportInbox() {
+  const [me, setMe] = useState<MeResponse["user"]>(null)
   const [threads, setThreads] = useState<ThreadItem[]>([])
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null)
   const [messages, setMessages] = useState<MessageItem[]>([])
@@ -33,19 +46,36 @@ export function SupportInbox() {
   const [body, setBody] = useState("")
   const [reply, setReply] = useState("")
   const [error, setError] = useState<string | null>(null)
+  const [busy, setBusy] = useState<string | null>(null)
+
+  const activeThread = useMemo(
+    () => threads.find((thread) => thread.id === activeThreadId) ?? null,
+    [activeThreadId, threads]
+  )
 
   async function loadThreads() {
-    const res = await fetch("/api/support/threads")
-    if (!res.ok) {
-      const json = await res.json().catch(() => null)
+    const [meRes, threadsRes] = await Promise.all([
+      fetch("/api/auth/me"),
+      fetch("/api/support/threads"),
+    ])
+
+    const meJson = (await meRes.json().catch(() => null)) as MeResponse | null
+    setMe(meJson?.user ?? null)
+
+    if (!threadsRes.ok) {
+      const json = await threadsRes.json().catch(() => null)
       setError(json?.error ?? "Failed to load support threads")
       return
     }
-    const json = await res.json()
+
+    const json = (await threadsRes.json()) as ThreadItem[]
     setThreads(json)
-    if (!activeThreadId && json[0]) {
-      setActiveThreadId(json[0].id)
-    }
+    setActiveThreadId((currentId) => {
+      if (currentId && json.some((thread) => thread.id === currentId)) {
+        return currentId
+      }
+      return json[0]?.id ?? null
+    })
   }
 
   async function loadMessages(threadId: string) {
@@ -64,45 +94,110 @@ export function SupportInbox() {
   }, [])
 
   useEffect(() => {
-    if (!activeThreadId) return
+    if (!activeThreadId) {
+      setMessages([])
+      return
+    }
     loadMessages(activeThreadId).catch(() => setError("Failed to load messages"))
   }, [activeThreadId])
 
   async function createThread(e: FormEvent<HTMLFormElement>) {
     e.preventDefault()
     setError(null)
+    setBusy("create")
+
     const res = await fetch("/api/support/threads", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ subject, body }),
     })
+
+    setBusy(null)
     if (!res.ok) {
       const json = await res.json().catch(() => null)
       setError(json?.error ?? "Failed to create thread")
       return
     }
+
+    const json = (await res.json()) as ThreadItem
     setSubject("")
     setBody("")
     await loadThreads()
+    setActiveThreadId(json.id)
   }
 
   async function sendReply(e: FormEvent<HTMLFormElement>) {
     e.preventDefault()
     if (!activeThreadId) return
+
     setError(null)
+    setBusy("reply")
     const res = await fetch(`/api/support/threads/${activeThreadId}/messages`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ body: reply }),
     })
+    setBusy(null)
+
     if (!res.ok) {
       const json = await res.json().catch(() => null)
       setError(json?.error ?? "Failed to send message")
       return
     }
+
     setReply("")
-    await loadMessages(activeThreadId)
+    await Promise.all([loadMessages(activeThreadId), loadThreads()])
   }
+
+  async function updateThreadStatus(status: ThreadItem["status"]) {
+    if (!activeThreadId) return
+
+    setError(null)
+    setBusy("status")
+    const res = await fetch(`/api/support/threads/${activeThreadId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status }),
+    })
+    setBusy(null)
+
+    if (!res.ok) {
+      const json = await res.json().catch(() => null)
+      setError(json?.error ?? "Failed to update thread status")
+      return
+    }
+
+    await loadThreads()
+  }
+
+  async function deleteThread() {
+    if (!activeThreadId || !activeThread) return
+    const confirmed = window.confirm(`Delete support thread "${activeThread.subject}"?`)
+    if (!confirmed) return
+
+    setError(null)
+    setBusy("delete")
+    const res = await fetch(`/api/support/threads/${activeThreadId}`, {
+      method: "DELETE",
+    })
+    setBusy(null)
+
+    if (!res.ok) {
+      const json = await res.json().catch(() => null)
+      setError(json?.error ?? "Failed to delete thread")
+      return
+    }
+
+    setMessages([])
+    await loadThreads()
+  }
+
+  const canResolveThread = Boolean(activeThread && me && activeThread.ownerUserId === me.id)
+  const canDeleteThread = Boolean(
+    activeThread &&
+      me &&
+      (activeThread.ownerUserId === me.id || me.role === "ADMIN" || me.role === "OWNER")
+  )
 
   return (
     <main className="mx-auto grid max-w-6xl gap-6 px-4 py-10 md:grid-cols-3">
@@ -112,21 +207,34 @@ export function SupportInbox() {
           <p className="text-sm text-muted-foreground">No threads yet</p>
         ) : (
           <div className="space-y-2">
-            {threads.map((t) => (
-              <button
-                key={t.id}
-                type="button"
-                onClick={() => setActiveThreadId(t.id)}
-                className={`w-full rounded-md border p-2 text-left text-sm ${
-                  activeThreadId === t.id ? "border-primary" : ""
-                }`}
-              >
-                <p className="font-medium">{t.subject}</p>
-                <p className="text-xs text-muted-foreground">
-                  {t.owner?.email ?? "You"} • {new Date(t.updatedAt).toLocaleString()}
-                </p>
-              </button>
-            ))}
+            {threads.map((thread) => {
+              const selected = activeThreadId === thread.id
+              const threadOwnerLabel =
+                me && thread.ownerUserId === me.id
+                  ? "You"
+                  : thread.owner?.email ?? "Unknown user"
+
+              return (
+                <button
+                  key={thread.id}
+                  type="button"
+                  onClick={() => setActiveThreadId(thread.id)}
+                  className={`w-full rounded-md border p-3 text-left text-sm ${
+                    selected ? "border-primary" : ""
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="font-medium">{thread.subject}</p>
+                    <span className="rounded-full border px-2 py-0.5 text-[11px] text-muted-foreground">
+                      {getThreadStatusLabel(thread.status)}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {threadOwnerLabel} • {new Date(thread.updatedAt).toLocaleString()}
+                  </p>
+                </button>
+              )
+            })}
           </div>
         )}
 
@@ -148,28 +256,73 @@ export function SupportInbox() {
             required
             className="min-h-24 w-full rounded-md border bg-background px-3 py-2 text-sm"
           />
-          <Button type="submit" size="sm">Create thread</Button>
+          <Button type="submit" size="sm" disabled={busy === "create"}>
+            {busy === "create" ? "Creating..." : "Create thread"}
+          </Button>
         </form>
       </section>
 
       <section className="space-y-3 rounded-xl border p-4 md:col-span-2">
-        <div className="space-y-1">
-          <h2 className="text-lg font-semibold">Conversation</h2>
-          {activeThreadId && (
-            <p className="text-sm font-medium text-muted-foreground whitespace-pre-wrap">
-              Subject: {threads.find(t => t.id === activeThreadId)?.subject}
-            </p>
-          )}
+        <div className="space-y-2">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="space-y-1">
+              <h2 className="text-lg font-semibold">Conversation</h2>
+              {activeThread ? (
+                <>
+                  <p className="text-sm font-medium text-muted-foreground whitespace-pre-wrap">
+                    Subject: {activeThread.subject}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Status: {getThreadStatusLabel(activeThread.status)}
+                  </p>
+                </>
+              ) : null}
+            </div>
+
+            {activeThread ? (
+              <div className="flex flex-wrap gap-2">
+                {canResolveThread ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={busy === "status"}
+                    onClick={() =>
+                      updateThreadStatus(activeThread.status === "OPEN" ? "CLOSED" : "OPEN")
+                    }
+                  >
+                    {busy === "status"
+                      ? "Saving..."
+                      : activeThread.status === "OPEN"
+                        ? "Mark resolved"
+                        : "Mark unresolved"}
+                  </Button>
+                ) : null}
+                {canDeleteThread ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="destructive"
+                    disabled={busy === "delete"}
+                    onClick={deleteThread}
+                  >
+                    {busy === "delete" ? "Deleting..." : "Delete thread"}
+                  </Button>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
         </div>
+
         {error ? <p className="text-sm text-destructive">{error}</p> : null}
 
         <div className="space-y-2">
-          {messages.map((m) => (
-            <article key={m.id} className="rounded-md border p-3">
-              <p className="text-xs text-muted-foreground mb-1">
-                {m.senderRole} • {m.direction} • {new Date(m.createdAt).toLocaleString()}
+          {messages.map((message) => (
+            <article key={message.id} className="rounded-md border p-3">
+              <p className="mb-1 text-xs text-muted-foreground">
+                {message.senderRole} • {message.direction} • {new Date(message.createdAt).toLocaleString()}
               </p>
-              <p className="text-sm whitespace-pre-wrap">{m.body}</p>
+              <p className="text-sm whitespace-pre-wrap">{message.body}</p>
             </article>
           ))}
           {messages.length === 0 ? (
@@ -186,7 +339,9 @@ export function SupportInbox() {
               required
               className="min-h-24 w-full rounded-md border bg-background px-3 py-2 text-sm"
             />
-            <Button type="submit" size="sm">Send</Button>
+            <Button type="submit" size="sm" disabled={busy === "reply"}>
+              {busy === "reply" ? "Sending..." : "Send"}
+            </Button>
           </form>
         ) : null}
       </section>
