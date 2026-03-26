@@ -2,6 +2,8 @@
 
 import { FormEvent, useEffect, useMemo, useState } from "react"
 import { Button } from "@/components/ui/button"
+import { useAppDispatch, useAppSelector } from "@/store"
+import { fetchCurrentUser } from "@/store/slices/authSlice"
 
 interface ThreadItem {
   id: string
@@ -38,7 +40,9 @@ function getThreadStatusLabel(status: ThreadItem["status"]) {
 }
 
 export function SupportInbox() {
-  const [me, setMe] = useState<MeResponse["user"]>(null)
+  const dispatch = useAppDispatch()
+  const authUser = useAppSelector((state) => state.auth.user)
+  const me = authUser ? { id: authUser.id, email: authUser.email, role: authUser.role as "OWNER" | "ADMIN" | "USER" } : null
   const [threads, setThreads] = useState<ThreadItem[]>([])
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null)
   const [messages, setMessages] = useState<MessageItem[]>([])
@@ -54,13 +58,7 @@ export function SupportInbox() {
   )
 
   async function loadThreads() {
-    const [meRes, threadsRes] = await Promise.all([
-      fetch("/api/auth/me"),
-      fetch("/api/support/threads"),
-    ])
-
-    const meJson = (await meRes.json().catch(() => null)) as MeResponse | null
-    setMe(meJson?.user ?? null)
+    const threadsRes = await fetch("/api/support/threads")
 
     if (!threadsRes.ok) {
       const json = await threadsRes.json().catch(() => null)
@@ -90,8 +88,9 @@ export function SupportInbox() {
   }
 
   useEffect(() => {
+    if (!authUser) dispatch(fetchCurrentUser())
     loadThreads().catch(() => setError("Failed to load support threads"))
-  }, [])
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!activeThreadId) {

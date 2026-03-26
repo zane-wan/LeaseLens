@@ -33,6 +33,7 @@ test-s3-upload.ts
 
 # Dev-only data & scripts
 data/
+files/
 scripts/
 postman/
 
