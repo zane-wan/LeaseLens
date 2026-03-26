@@ -42,6 +42,7 @@ async function createAgreement(req: NextRequest) {
         },
         select: {
           id: true,
+          title: true,
           agreements: {
             select: { id: true },
           },
@@ -71,12 +72,19 @@ async function createAgreement(req: NextRequest) {
     })
 
     if (parsed.data.sessionId) {
-      await tx.chatSession.update({
+      const session = await tx.chatSession.findUnique({
         where: { id: parsed.data.sessionId },
-        data: {
-          title: parsed.data.fileName,
-        },
+        select: { title: true },
       })
+
+      if (session && session.title.trim() === "New Session") {
+        await tx.chatSession.update({
+          where: { id: parsed.data.sessionId },
+          data: {
+            title: parsed.data.fileName,
+          },
+        })
+      }
     }
 
     return created
@@ -113,16 +121,6 @@ async function deleteAgreement(req: NextRequest, id: string) {
   await prisma.$transaction(async (tx) => {
     await tx.agreement.delete({ where: { id } })
 
-    if (agreement.chatSessions.length > 0) {
-      await tx.chatSession.updateMany({
-        where: {
-          id: { in: agreement.chatSessions.map((session) => session.id) },
-        },
-        data: {
-          title: "New Session",
-        },
-      })
-    }
   })
 
   return new NextResponse(null, { status: 204 })

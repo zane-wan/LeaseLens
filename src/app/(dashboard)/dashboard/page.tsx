@@ -91,6 +91,8 @@ export default function DashboardPage() {
   const [pageError, setPageError] = useState<string | null>(null)
   const [creatingSession, setCreatingSession] = useState(false)
   const [busySessionId, setBusySessionId] = useState<string | null>(null)
+  const [sessionName, setSessionName] = useState("")
+  const [savingSessionName, setSavingSessionName] = useState(false)
 
   const activeAgreement = activeSession?.agreements[0] ?? null
 
@@ -116,6 +118,7 @@ export default function DashboardPage() {
     setActiveSessionId(session.id)
     setActiveSession(session)
     setInitialMessages(toChatMessages(session.messages))
+    setSessionName(session.title)
     setLoadingSession(false)
     return session
   }, [])
@@ -132,6 +135,7 @@ export default function DashboardPage() {
         setActiveSessionId(null)
         setActiveSession(null)
         setInitialMessages([])
+        setSessionName("")
         return
       }
 
@@ -219,6 +223,40 @@ export default function DashboardPage() {
       setPageError(error instanceof Error ? error.message : "Failed to delete session")
     } finally {
       setBusySessionId(null)
+    }
+  }
+
+  async function handleRenameSession() {
+    if (!activeSessionId) return
+
+    const trimmedName = sessionName.trim()
+    if (!trimmedName) {
+      setPageError("Session name cannot be empty")
+      return
+    }
+    if (trimmedName === (activeSession?.title ?? "")) {
+      return
+    }
+
+    setSavingSessionName(true)
+    setPageError(null)
+
+    try {
+      const res = await fetch(`/api/chats/sessions/${activeSessionId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: trimmedName }),
+      })
+      if (!res.ok) {
+        const json = await res.json().catch(() => null)
+        throw new Error(json?.error ?? "Failed to rename session")
+      }
+
+      await syncSessions(activeSessionId)
+    } catch (error) {
+      setPageError(error instanceof Error ? error.message : "Failed to rename session")
+    } finally {
+      setSavingSessionName(false)
     }
   }
 
@@ -408,8 +446,32 @@ export default function DashboardPage() {
           <>
             <div className="rounded-2xl border bg-card p-6">
               <div className="flex flex-wrap items-start justify-between gap-4">
-                <div>
-                  <h2 className="text-2xl font-bold">{activeSession?.title ?? "New Session"}</h2>
+                <div className="min-w-0 flex-1">
+                  <label htmlFor="session-name" className="text-sm font-medium">
+                    Session Name
+                  </label>
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    <Input
+                      id="session-name"
+                      value={sessionName}
+                      onChange={(event) => setSessionName(event.target.value)}
+                      maxLength={120}
+                      className="max-w-md"
+                    />
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      disabled={
+                        savingSessionName ||
+                        !sessionName.trim() ||
+                        sessionName.trim() === (activeSession?.title ?? "")
+                      }
+                      onClick={handleRenameSession}
+                    >
+                      {savingSessionName ? "Saving..." : "Save Name"}
+                    </Button>
+                  </div>
                   <p className="mt-1 text-sm text-muted-foreground">
                     {activeAgreement
                       ? `Current file: ${activeAgreement.fileName}`

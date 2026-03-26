@@ -12,6 +12,10 @@ const sessionSchema = z.object({
   agreementIds: z.array(z.string().min(1)).max(1).optional(),
 })
 
+const renameSessionSchema = z.object({
+  title: z.string().trim().min(1).max(120),
+})
+
 const messageSchema = z.object({
   role: z.enum(["USER", "ASSISTANT", "SYSTEM"]),
   content: z.string().trim().min(1),
@@ -203,6 +207,45 @@ async function deleteSession(req: NextRequest, sessionId: string) {
   })
 
   return new NextResponse(null, { status: 204 })
+}
+
+async function renameSession(req: NextRequest, sessionId: string) {
+  const user = await requireAuthFromRequest(req)
+  const body = await req.json()
+  const parsed = renameSessionSchema.safeParse(body)
+  if (!parsed.success) {
+    return NextResponse.json({ error: "Invalid payload" }, { status: 400 })
+  }
+
+  const session = await prisma.chatSession.findFirst({
+    where: {
+      id: sessionId,
+      userId: user.id,
+    },
+    select: {
+      id: true,
+    },
+  })
+
+  if (!session) {
+    return NextResponse.json({ error: "Session not found" }, { status: 404 })
+  }
+
+  const updated = await prisma.chatSession.update({
+    where: { id: session.id },
+    data: {
+      title: parsed.data.title,
+    },
+    select: {
+      id: true,
+      title: true,
+      agreements: { select: { id: true, fileName: true, status: true } },
+      createdAt: true,
+      updatedAt: true,
+    },
+  })
+
+  return NextResponse.json(updated)
 }
 
 // ---------------------------------------------------------------------------
@@ -462,6 +505,24 @@ export async function POST(
       return NextResponse.json({ error: err.message }, { status: err.status })
     }
     return NextResponse.json({ error: "Failed to process request" }, { status: 500 })
+  }
+}
+
+export async function PATCH(
+  req: NextRequest,
+  { params }: { params: Promise<{ segments?: string[] }> },
+) {
+  try {
+    const { segments = [] } = await params
+    if (segments.length === 1) {
+      return await renameSession(req, segments[0])
+    }
+    return NextResponse.json({ error: "Not found" }, { status: 404 })
+  } catch (err) {
+    if (err instanceof AuthError) {
+      return NextResponse.json({ error: err.message }, { status: err.status })
+    }
+    return NextResponse.json({ error: "Failed to rename session" }, { status: 500 })
   }
 }
 
