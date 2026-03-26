@@ -3,6 +3,7 @@ import "./globals.css"
 import { Geist } from "next/font/google"
 import { cn } from "@/lib/utils"
 import { ThemeProvider } from "@/components/theme-provider"
+import { StoreProvider } from "@/components/StoreProvider"
 import { Navbar } from "@/components/navbar"
 import { Toaster } from "@/components/ui/sonner"
 
@@ -22,11 +23,13 @@ export default function RootLayout({
   return (
     <html lang="en" className={cn("font-sans", geist.variable)} suppressHydrationWarning>
       <body className="min-h-screen bg-background text-foreground antialiased">
-        <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
-          <Navbar />
-          {children}
-          <Toaster position="top-right" />
-        </ThemeProvider>
+        <StoreProvider>
+          <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
+            <Navbar />
+            {children}
+            <Toaster position="top-right" />
+          </ThemeProvider>
+        </StoreProvider>
       </body>
     </html>
   )

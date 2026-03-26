@@ -4,6 +4,8 @@ import { FormEvent, useEffect, useState } from "react"
 import type { UserRole } from "@prisma/client"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import { useAppDispatch, useAppSelector } from "@/store"
+import { fetchCurrentUser, setUser } from "@/store/slices/authSlice"
 
 async function readJsonSafely<T>(res: Response): Promise<T | null> {
   return res.json().catch(() => null)
@@ -64,7 +66,9 @@ function canDeleteTarget(me: NonNullable<MeResponse["user"]>, target: AdminUser)
 }
 
 export function AccountSettings({ initialStatus }: { initialStatus?: string }) {
-  const [user, setUser] = useState<AccountUser | null>(null)
+  const dispatch = useAppDispatch()
+  const user = useAppSelector((state) => state.auth.user)
+  const authLoading = useAppSelector((state) => state.auth.loading)
   const [name, setName] = useState("")
   const [email, setEmail] = useState("")
   const [currentPassword, setCurrentPassword] = useState("")
@@ -88,24 +92,15 @@ export function AccountSettings({ initialStatus }: { initialStatus?: string }) {
   }, [initialStatus])
 
   useEffect(() => {
-    let active = true
-    fetch("/api/auth/account")
-      .then((res) => res.json())
-      .then((json) => {
-        if (!active) return
-        setUser(json.user)
-        setName(json.user?.name ?? "")
-        setEmail(json.user?.email ?? "")
-      })
-      .catch(() => {
-        if (!active) return
-        setError("Failed to load account")
-      })
+    dispatch(fetchCurrentUser())
+  }, [dispatch])
 
-    return () => {
-      active = false
+  useEffect(() => {
+    if (user) {
+      setName(user.name ?? "")
+      setEmail(user.email ?? "")
     }
-  }, [])
+  }, [user])
 
   async function onSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault()
@@ -140,7 +135,7 @@ export function AccountSettings({ initialStatus }: { initialStatus?: string }) {
       return
     }
 
-    setUser(updatedUser)
+    dispatch(setUser(updatedUser))
     setName(updatedUser.name ?? "")
     setEmail(updatedUser.email)
     setCurrentPassword("")
@@ -209,7 +204,7 @@ export function AccountSettings({ initialStatus }: { initialStatus?: string }) {
     }
   }
 
-  if (!user) {
+  if (authLoading || !user) {
     return <p className="text-sm text-muted-foreground">Loading account...</p>
   }
 
@@ -364,20 +359,16 @@ export function AccountSettings({ initialStatus }: { initialStatus?: string }) {
 }
 
 export function AdminUsersPanel() {
-  const [me, setMe] = useState<MeResponse["user"]>(null)
+  const dispatch = useAppDispatch()
+  const authUser = useAppSelector((state) => state.auth.user)
+  const me = authUser ? { id: authUser.id, role: authUser.role } : null
   const [users, setUsers] = useState<AdminUser[]>([])
   const [error, setError] = useState<string | null>(null)
   const [busyId, setBusyId] = useState<string | null>(null)
 
   async function load() {
     setError(null)
-    const [meRes, usersRes] = await Promise.all([
-      fetch("/api/auth/me"),
-      fetch("/api/admin/users"),
-    ])
-
-    const meJson = (await readJsonSafely<MeResponse>(meRes)) ?? { user: null }
-    setMe(meJson.user ?? null)
+    const usersRes = await fetch("/api/admin/users")
     if (!usersRes.ok) {
       const err = await readJsonSafely<{ error?: string }>(usersRes)
       setError(err?.error ?? "Failed to load users")
@@ -387,6 +378,10 @@ export function AdminUsersPanel() {
     const usersJson = (await readJsonSafely<AdminUser[]>(usersRes)) ?? []
     setUsers(usersJson)
   }
+
+  useEffect(() => {
+    if (!authUser) dispatch(fetchCurrentUser())
+  }, [authUser, dispatch])
 
   useEffect(() => {
     load().catch(() => setError("Failed to load users"))

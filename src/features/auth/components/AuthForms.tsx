@@ -6,6 +6,8 @@ import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardFooter } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
+import { useAppDispatch } from "@/store"
+import { fetchCurrentUser } from "@/store/slices/authSlice"
 
 async function postJson(url: string, payload: unknown) {
   const res = await fetch(url, {
@@ -39,6 +41,7 @@ function AuthCard({
 
 export function LoginForm() {
   const router = useRouter()
+  const dispatch = useAppDispatch()
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [loading, setLoading] = useState(false)
@@ -57,6 +60,7 @@ export function LoginForm() {
       return
     }
 
+    dispatch(fetchCurrentUser())
     router.replace("/dashboard")
     router.refresh()
   }
