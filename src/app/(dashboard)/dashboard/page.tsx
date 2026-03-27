@@ -106,11 +106,11 @@ export default function DashboardPage() {
     return json
   }, [])
 
-  const loadSession = useCallback(async (sessionId: string) => {
-    setLoadingSession(true)
+  const loadSession = useCallback(async (sessionId: string, silent = false) => {
+    if (!silent) setLoadingSession(true)
     const res = await fetch(`/api/chats/sessions/${sessionId}`)
     if (!res.ok) {
-      setLoadingSession(false)
+      if (!silent) setLoadingSession(false)
       throw new Error("Failed to load session")
     }
 
@@ -119,7 +119,7 @@ export default function DashboardPage() {
     setActiveSession(session)
     setInitialMessages(toChatMessages(session.messages))
     setSessionName(session.title)
-    setLoadingSession(false)
+    if (!silent) setLoadingSession(false)
     return session
   }, [])
 
@@ -162,7 +162,7 @@ export default function DashboardPage() {
     if (!activeSessionId || activeAgreement?.status !== "PROCESSING") return
 
     const timer = setInterval(() => {
-      void Promise.all([fetchSessions(), loadSession(activeSessionId)]).catch(() => null)
+      void Promise.all([fetchSessions(), loadSession(activeSessionId, true)]).catch(() => null)
     }, 3000)
 
     return () => clearInterval(timer)
