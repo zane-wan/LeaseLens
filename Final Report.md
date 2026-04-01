@@ -215,6 +215,22 @@ only a course deliverable but also a strong example of how AI-assisted features,
 and full-stack engineering can be combined into a usable application when the implementation is
 kept grounded in clear requirements and continuous verification.
 
+## AI Assistance & Verification (Summary)
+
+### Login, role control and part of UI/Dashboard design (Ruiwu):
+
+In this part, AI is used in the following ways:
+- Code completion: Enabled by default on Microsoft VS Code IDE. The default settings are used for
+  this utilization.
+- UI/Dashboard template searching: I used GPT-5.4, and asked the agent to help me find out a set
+  of UI/Dashboard templates that have high ratings or high forks or high stars. Then, I checked them
+  manually one by one to find out the best fit. After that, I edited the templates manually to make them
+  compatible with our project.
+- Code commenting: As we are a group of 4, it's important to add comments for codes to enhance readability
+  and therefore increase the efficiency of team collaborations. After finishing writing the code, I
+  asked the AI to add or polish my comments so that they include all the details needed to understand the
+  code that I wrote.
+
 ---
 
 ## Individual Contributions
