@@ -4,17 +4,17 @@ AI-powered Ontario residential lease compliance analyzer — upload a lease, get
 
 ## Tech Stack
 
-| Layer | Technology |
-|-------|-----------|
-| Framework | Next.js 15 (App Router) |
-| UI | React 19, Tailwind CSS v4, shadcn/ui |
-| State | Redux Toolkit |
-| Database | PostgreSQL + Prisma ORM |
-| Auth | JWT + Google OAuth |
-| AI | Vercel AI SDK + OpenAI GPT-4o |
-| Validation | Zod |
-| Storage | AWS S3 (lease PDFs) |
-| Hosting | AWS EC2 |
+| Layer      | Technology                           |
+| ---------- | ------------------------------------ |
+| Framework  | Next.js 15 (App Router)              |
+| UI         | React 19, Tailwind CSS v4, shadcn/ui |
+| State      | Redux Toolkit                        |
+| Database   | PostgreSQL + Prisma ORM              |
+| Auth       | JWT + Google OAuth                   |
+| AI         | Vercel AI SDK + OpenAI GPT-4o        |
+| Validation | Zod                                  |
+| Storage    | AWS S3 (lease PDFs)                  |
+| Hosting    | AWS EC2                              |
 
 ## Quick Start
 
@@ -152,19 +152,19 @@ src/
 
 ## Task Breakdown
 
-| ID  | Sub-task                                                         | Assignee | Dependencies |
-| --- | ---------------------------------------------------------------- | -------- | ------------ |
-| T1a | Google OAuth setup (Better Auth + provider config)               | Zihan    | None         |
-| T1b | Login/signup pages                                               | Ruiwu    | T1a          |
-| T2a | S3 presigned URL backend                                         | Zihan    | None         |
-| T2b | Drag-drop upload UI + PDF parsing                                | Yiyang   | T2a          |
-| T3  | Database schema + Prisma models (agreements, analyses, users)    | yiyang   | None         |
-| T4  | Dashboard UI (agreement list, status badges, detail view)        | Ruiwu    | T1, T3       |
-| T5a | RAG retrieval + LLM orchestration                                | Zihan    | T3           |
-| T5b | Analysis results storage                                         | Yiyang   | T5a, T3      |
-| T6  | Analysis results UI (clause cards, compliance badges, citations) | TBD      | T4, T5       |
-| T7a | AWS EC2 deploy                                                   | Zihan    | T6           |
-| T7b | Error handling + loading states                                  | TBD      | T6           |
+| ID  | Sub-task                                                         | Assignee      | Dependencies |
+| --- | ---------------------------------------------------------------- | ------------- | ------------ |
+| T1a | Google OAuth setup (Better Auth + provider config)               | Zihan         | None         |
+| T1b | Login/signup pages                                               | Ruiwu         | T1a          |
+| T2a | S3 presigned URL backend                                         | Zihan         | None         |
+| T2b | Drag-drop upload UI + PDF parsing                                | Yiyang        | T2a          |
+| T3  | Database schema + Prisma models (agreements, analyses, users)    | yiyang        | None         |
+| T4  | Dashboard UI (agreement list, status badges, detail view)        | Ruiwu, Kaiwei | T1, T3       |
+| T5a | RAG retrieval + LLM orchestration                                | Zihan         | T3           |
+| T5b | Analysis results storage                                         | Yiyang        | T5a, T3      |
+| T6  | Analysis results UI (clause cards, compliance badges, citations) | Ruiwu, Kaiwei | T4, T5       |
+| T7a | AWS EC2 deploy                                                   | Zihan         | T6           |
+| T7b | Error handling + loading states                                  | TBD           | T6           |
 
 ### Execution Order
 
@@ -226,9 +226,11 @@ doc: add README with project structure
 ## Ruiwu Edits
 
 ### Edit Overview 2026.3.11
+
 Recompared against manager `main` snapshot, kept shared main logic where applicable, and consolidated T1b/T6 with email-required auth, Google OAuth, RBAC, per-user isolation, plus duplication/bug cleanup (stale placeholders removed, verified-email OAuth guard, direct `jose` dependency, and safer in-memory throttling cleanup).
 
 ### Edited Scripts 2026.3.11
+
 - `README.md`: Synced this section with the latest main-branch comparison, cleanup pass, and current merge guidance for T1b/T6 dependents.
 - `package.json`: Added `jose` as a direct runtime dependency because JWT auth imports it directly.
 - `package-lock.json`: Refreshed lock metadata to keep dependency resolution consistent with the root dependency manifest.
@@ -242,6 +244,7 @@ Recompared against manager `main` snapshot, kept shared main logic where applica
 - `src/lib/auth.ts`: Aligned JWT-cookie auth utilities with manager-main behavior while keeping shared helper interfaces used by merged routes/components.
 
 ### Added Scripts 2026.3.11
+
 - `prisma/migrations/20260311190000_auth_rbac_memory/migration.sql`: Adds the migration for RBAC, support messaging, and user-scoped chat/memory tables.
 - `prisma/migrations/20260312003000_username_optional_email_password_reset/migration.sql`: Adds the first password-reset persistence rollout migration.
 - `prisma/migrations/20260313001000_email_required_drop_username/migration.sql`: Enforces required email identity, backfills any null emails, and removes the username column.
@@ -276,10 +279,11 @@ Recompared against manager `main` snapshot, kept shared main logic where applica
 - `src/lib/rbac.ts`: Adds centralized role and account-management permission checks.
 
 ### Merge Instructions on Modules Based on T1b and T6
+
 All modules that depend on T1b/T6 should pull this branch and run `npm install`, `npx prisma migrate dev`, and `npx prisma generate` first so the current auth/RBAC/chat/support schema and APIs are available locally.  
 For auth integration, keep email as the required account identifier for credential login/signup, and keep Google OAuth as the alternate login path via `/api/auth/google` and `/api/auth/google/callback`.  
 For shared logic consistency with manager main, reuse the centralized session helper module for request identity and keep upload/auth route behavior as implemented instead of reintroducing older parallel handlers.  
 For ownership isolation, always scope agreements, analyses, chat sessions/messages, and memory data with the authenticated `user.id` in database filters.  
 For account/admin flows, route permission and credential updates through the consolidated auth-service and RBAC modules and avoid duplicating those checks in feature-specific handlers.  
 For password reset, use `/api/auth/password-reset/start`, `/send-code`, and `/confirm` with email payloads only and keep reset-code throttling enabled.  
-For T6-dependent work, keep the analysis detail contract stable by writing `Analysis` + `ClauseResult` and exposing status via `/api/agreements/[id]/status` (from the merged segments route).  
+For T6-dependent work, keep the analysis detail contract stable by writing `Analysis` + `ClauseResult` and exposing status via `/api/agreements/[id]/status` (from the merged segments route).
