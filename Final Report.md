@@ -16,7 +16,7 @@
   - [Individual Contributions](#individual-contributions)
     - [Yiyang Liu](#yiyang-liu)
     - [Kaiwei Zhang](#kaiwei-zhang)
-
+    - [Ruiwu Liu](#ruiwu-liu)
 ---
 
 ## Team Information
