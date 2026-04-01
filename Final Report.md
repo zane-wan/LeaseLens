@@ -2,12 +2,19 @@
 
 ## Table of Contents
 
-- [Team Information](#team-information)
-- [Video Demo](#video-demo)
-- [Motivation](#motivation)
-- [Objectives](#objectives)
-- [Technical Stack](#technical-stack)
-- [Individual Contributions](#individual-contributions)
+- [LeaseLens](#leaselens)
+  - [Table of Contents](#table-of-contents)
+  - [Team Information](#team-information)
+  - [Video Demo](#video-demo)
+  - [Motivation](#motivation)
+  - [Objectives](#objectives)
+  - [Technical Stack](#technical-stack)
+  - [Features](#features)
+  - [User Guide](#user-guide)
+  - [Development Guide](#development-guide)
+  - [Individual Contributions](#individual-contributions)
+    - [Yiyang Liu](#yiyang-liu)
+    - [Kaiwei Zhang](#kaiwei-zhang)
 ---
 
 ## Team Information
@@ -16,7 +23,7 @@
 | ----------- | -------------- | ------------------------------ |
 | Yiyang Liu  | 1011770512     | yiyang.liu@mail.utoronto.ca    |
 | Zihan Wan   | 1011617779     | zihanzane.wan@mail.utoronto.ca |
-| Yiyang Liu  | 1011770512     | yiyang.liu@mail.utoronto.ca    |
+| Kaiwei Zhang| 1007073872     | kwei.zhang@mail.utoronto.ca    |
 | Zihan Wan   | 1011617779     | zihanzane.wan@mail.utoronto.ca |
 
 ---
@@ -94,6 +101,71 @@ Watch the walkthrough here: [Demo]( )
   10. Validation and supporting libraries: Zod for request/data validation, along with utility
      modules for rate limiting, email flows, password reset, and shared server-side helpers.
 
+ ## Features
+
+ ## User Guide
+
+ ## Development Guide
+
+ LeaseLens is a Next.js 15 + TypeScript application backed by PostgreSQL/Prisma, AWS S3,
+ and OpenAI-based analysis services. Developers can get the project running locally by
+ installing dependencies, configuring environment variables, initializing the database, and
+ verifying the S3 upload and test workflows.
+
+ 1. Environment setup and configuration
+
+    - Install the project prerequisites: Node.js 20+, npm, and PostgreSQL if a local database
+      will be used instead of the shared team instance.
+    - Clone the repository, enter the project folder, and install dependencies with `npm install`.
+    - Copy `.env.example` to `.env.local`, since the application, Prisma config, Vitest setup,
+      and ingestion scripts all load local configuration from `.env.local`.
+    - Fill in the required variables:
+      - `DATABASE_URL` for PostgreSQL
+      - `OPENAI_API_KEY` for analysis and embedding generation
+      - `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_S3_BUCKET`, and `AWS_REGION` for file storage
+      - `JWT_SECRET` for session/auth token signing
+      - `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, and `NEXT_PUBLIC_APP_URL` for Google OAuth
+      - `STRIPE_*` values if subscription flows need to be tested locally
+
+ 2. Database initialization
+
+    - The recommended option is to use the shared AWS RDS PostgreSQL instance maintained by the
+      team, because it already contains the main schema and seeded legal retrieval data.
+    - For a standalone local setup, create a PostgreSQL database and
+      ensure the `vector` extension is available, because the `RtaChunk` table stores pgvector
+      embeddings for RAG retrieval.
+    - Run the Prisma setup commands after `DATABASE_URL` has been configured:
+      - `npx prisma migrate dev` to apply the tracked migrations
+      - `npx prisma generate` to generate the Prisma client
+    - If the local database does not already contain RTA retrieval data, run the ingestion
+      script with `npx tsx scripts/ingest-rta.ts`. This script parses the source statute text,
+      generates OpenAI embeddings, and stores indexed `RtaChunk` records in PostgreSQL.
+
+ 3. Cloud storage configuration
+
+    - Lease documents are uploaded through presigned URLs and stored in AWS S3, so a working
+      bucket and IAM credentials are required for end-to-end upload testing.
+    - Create or reuse an S3 bucket in the configured region, then provide the bucket name and
+      credentials through `AWS_S3_BUCKET`, `AWS_REGION`, `AWS_ACCESS_KEY_ID`, and
+      `AWS_SECRET_ACCESS_KEY`.
+    - The IAM user or role should be allowed to perform object upload, download, and delete
+      operations on the configured bucket, since the application generates presigned upload URLs
+      and also reads/deletes stored agreements.
+    - S3 connectivity can be validated with the existing `test-s3-upload.ts` script, which
+      generates a presigned URL and performs a sample `PUT` upload request.
+
+ 4. Local development and testing
+
+    - Start the application with `npm run dev`, then open `http://localhost:3000`.
+    - Developers can test core authentication and dashboard flows in the browser once `.env.local`,
+      the database, and S3 credentials are in place.
+    - Use `npm run lint` to catch code-quality issues and `npm test` to run the Vitest suite.
+    - Integration tests such as the RAG retrieval checks require live `DATABASE_URL` and
+      `OPENAI_API_KEY` values, since they query the real database and embeddings pipeline rather
+      than mocked data.
+    - When upload behavior is being debugged, the S3 upload test script provides a focused way
+      to confirm that presigned URL generation and object storage permissions are configured
+      correctly before testing the full UI flow.
 ---
 
  ## Individual Contributions
@@ -106,3 +178,10 @@ Watch the walkthrough here: [Demo]( )
   - Built client-side PDF parsing support as part of the upload workflow
   - Contributed to the analysis results UI, including parts of the result display and user-facing
         analysis presentation
+
+ ### Kaiwei Zhang
+
+  - Designed the homepage UI and contributed to the overall landing-page user experience
+  - Integrated frontend and backend components to support complete user interface workflows and resolved API-related issues during development
+  - Implemented session management features that allow users to revisit and access past sessions
+  - Integrated Stripe-based payment and subscription functionality for billing-related workflows
