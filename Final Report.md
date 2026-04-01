@@ -26,7 +26,7 @@
 | Yiyang Liu   | 1011770512     | yiyang.liu@mail.utoronto.ca    |
 | Zihan Wan    | 1011617779     | zihanzane.wan@mail.utoronto.ca |
 | Kaiwei Zhang | 1007073872     | kwei.zhang@mail.utoronto.ca    |
-| Zihan Wan    | 1011617779     | zihanzane.wan@mail.utoronto.ca |
+| Ruiwu Liu    | 1011815332     | rev.liu@mail.utoronto.ca       |
 
 ---
 
