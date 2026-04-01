@@ -17,6 +17,7 @@
     - [Yiyang Liu](#yiyang-liu)
     - [Kaiwei Zhang](#kaiwei-zhang)
     - [Ruiwu Liu](#ruiwu-liu)
+
 ---
 
 ## Team Information
@@ -186,6 +187,34 @@ repository workflow. The public application base URL is configured externally th
 `NEXT_PUBLIC_APP_URL` environment variable. In the deployed environment, it is set to
 `https://leaselens.website/`.
 
+## Lessons Learned and Concluding Remarks
+
+This project reinforced that a focused scope is more valuable than an overly broad feature list.
+By limiting the legal domain to Ontario residential leases and building on a Next.js full-stack
+architecture, we were able to keep frontend, backend, and database work integrated instead of
+splitting effort across too many disconnected systems. That decision made it easier to move from
+individual features to a coherent end-to-end product.
+
+We also learned that the hardest parts of a full-stack project are usually at the integration
+boundaries rather than inside isolated modules. Authentication, per-user file access, AWS S3
+uploads, PostgreSQL persistence, LLM-based analysis, Stripe billing, and email delivery all worked
+individually, but making them reliable together required careful debugging of routing, environment
+variables, permissions, and deployment configuration. In particular, privacy-sensitive features
+such as agreement access and support threads forced us to treat authorization as a server-side
+concern throughout the application, not just a frontend convenience.
+
+Another important lesson was that AI assistance was helpful but never sufficient on its own. AI
+was useful for brainstorming architectures, debugging specific issues, and drafting technical
+explanations, but many suggestions required correction or adaptation to fit our actual codebase and
+course constraints. We had to verify outputs through manual testing, type checking, Prisma
+validation, and end-to-end feature checks before accepting them.
+
+Overall, LeaseLens gave us practical experience building a modern web application with real
+tradeoffs in product scope, security, deployment, and team coordination. The final system is not
+only a course deliverable but also a strong example of how AI-assisted features, cloud services,
+and full-stack engineering can be combined into a usable application when the implementation is
+kept grounded in clear requirements and continuous verification.
+
 ---
 
 ## Individual Contributions
@@ -210,5 +239,5 @@ repository workflow. The public application base URL is configured externally th
 
 - Built login, signup, Google OAuth, and password reset flows with role-based account controls.
 - Developed protected dashboard pages for agreements, sessions, support threads, and account management.
-- Helped with analysis result interfaces with clause cards, compliance badges, citations, and polling-based status updates.
+- Developed and implemented AWS SES email service for verification code sending in reset password service.
 - Added per-user access isolation, admin and owner permissions, and session persistence workflows.
