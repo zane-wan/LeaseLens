@@ -97,3 +97,12 @@ Watch the walkthrough here: [Demo]( )
 ---
 
  ## Individual Contributions
+
+ ### Yiyang Liu
+
+  - Designed and implemented the database schema and Prisma models for core entities, including users,
+    agreements, analyses, and related data relationships
+  - Implemented the drag-and-drop upload interface for lease documents
+  - Built client-side PDF parsing support as part of the upload workflow
+  - Contributed to the analysis results UI, including parts of the result display and user-facing
+        analysis presentation
