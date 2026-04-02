@@ -52,15 +52,21 @@ export function useUpload(): UseUploadReturn {
     }
 
     try {
-      // 1. Get presigned URL (include fileSize for server-side enforcement)
-      const presignedRes = await fetch(
-        `/api/upload/presigned?fileName=${encodeURIComponent(file.name)}&contentType=application/pdf&fileSize=${file.size}`
-      )
+      // 1. Reserve an upload intent and get a presigned URL
+      const presignedRes = await fetch("/api/upload/presigned", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fileName: file.name,
+          contentType: "application/pdf",
+          fileSize: file.size,
+        }),
+      })
       if (!presignedRes.ok) {
         const err = await presignedRes.json().catch(() => null)
         throw new Error(err?.error ?? "get presigned URL failed")
       }
-      const { url, key } = await presignedRes.json()
+      const { url, key, intentId } = await presignedRes.json()
 
       // 2. Upload to S3
       try {
@@ -78,7 +84,7 @@ export function useUpload(): UseUploadReturn {
       const agreementRes = await fetch("/api/agreements", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ fileName: file.name, s3Key: key, sessionId }),
+        body: JSON.stringify({ uploadIntentId: intentId, sessionId }),
       })
       if (!agreementRes.ok) {
         const err = await agreementRes.json().catch(() => null)
