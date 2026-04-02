@@ -231,6 +231,12 @@ In this part, AI is used in the following ways:
   asked the AI to add or polish my comments so that they include all the details needed to understand the
   code that I wrote.
 
+### Landing page
+
+For the landing page, I designed the overall view and layout manually. The images used inside the
+page were AI-generated, and I integrated and adjusted them so that the final landing page fit
+LeaseLens and worked correctly in our project.
+
 ---
 
 ## Individual Contributions
