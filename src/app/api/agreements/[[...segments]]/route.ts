@@ -1,12 +1,22 @@
 import { NextRequest, NextResponse } from "next/server"
+import { Prisma } from "@prisma/client"
 import { z } from "zod"
 import { AuthError, requireAuthFromRequest } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import {
+  MAX_AGREEMENTS_PER_SESSION,
+  getSessionAgreementLimitErrorMessage,
+} from "@/lib/agreements"
 import { deleteS3Object } from "@/lib/s3"
+import {
+  cleanupExpiredUploadIntents,
+  getExpiredUploadIntentErrorMessage,
+  UploadVerificationError,
+  verifyUploadedObject,
+} from "@/lib/uploads"
 
 const createSchema = z.object({
-  fileName: z.string().min(1),
-  s3Key: z.string().min(1),
+  uploadIntentId: z.string().min(1),
   sessionId: z.string().min(1).optional(),
 })
 
@@ -27,13 +37,109 @@ async function listAgreements(req: NextRequest) {
 
 async function createAgreement(req: NextRequest) {
   const user = await requireAuthFromRequest(req)
+  await cleanupExpiredUploadIntents()
   const body = await req.json()
   const parsed = createSchema.safeParse(body)
   if (!parsed.success) {
     return NextResponse.json({ error: "Invalid body" }, { status: 400 })
   }
 
-  const agreement = await prisma.$transaction(async (tx) => {
+  const intent = await prisma.uploadIntent.findFirst({
+    where: {
+      id: parsed.data.uploadIntentId,
+      userId: user.id,
+    },
+    select: {
+      id: true,
+      agreementId: true,
+      fileName: true,
+      contentType: true,
+      fileSize: true,
+      s3Key: true,
+      status: true,
+      expiresAt: true,
+    },
+  })
+
+  if (!intent) {
+    return NextResponse.json({ error: "Upload intent not found" }, { status: 404 })
+  }
+
+  if (intent.status === "CONSUMED" && intent.agreementId) {
+    const existing = await prisma.agreement.findFirst({
+      where: {
+        id: intent.agreementId,
+        userId: user.id,
+      },
+    })
+
+    if (existing) {
+      return NextResponse.json(existing)
+    }
+  }
+
+  if (intent.status !== "RESERVED" || intent.expiresAt < new Date()) {
+    if (intent.status === "RESERVED" && intent.expiresAt < new Date()) {
+      await prisma.uploadIntent.update({
+        where: { id: intent.id },
+        data: { status: "EXPIRED" },
+      }).catch(() => null)
+    }
+    return NextResponse.json({ error: getExpiredUploadIntentErrorMessage() }, { status: 409 })
+  }
+
+  try {
+    await verifyUploadedObject(intent)
+  } catch (error) {
+    if (!(error instanceof UploadVerificationError)) {
+      throw error
+    }
+
+    return NextResponse.json(
+      { error: error.message },
+      { status: 400 },
+    )
+  }
+
+  const result = await prisma.$transaction(async (tx) => {
+    const currentIntent = await tx.uploadIntent.findFirst({
+      where: {
+        id: parsed.data.uploadIntentId,
+        userId: user.id,
+      },
+      select: {
+        id: true,
+        agreementId: true,
+        fileName: true,
+        s3Key: true,
+        status: true,
+        expiresAt: true,
+      },
+    })
+
+    if (!currentIntent) {
+      throw new AuthError("Upload intent not found", 404)
+    }
+
+    if (currentIntent.status === "CONSUMED" && currentIntent.agreementId) {
+      const existing = await tx.agreement.findFirst({
+        where: {
+          id: currentIntent.agreementId,
+          userId: user.id,
+        },
+      })
+
+      if (!existing) {
+        throw new AuthError("Upload already finalized", 409)
+      }
+
+      return { agreement: existing, created: false }
+    }
+
+    if (currentIntent.status !== "RESERVED" || currentIntent.expiresAt < new Date()) {
+      throw new AuthError(getExpiredUploadIntentErrorMessage(), 409)
+    }
+
     if (parsed.data.sessionId) {
       const session = await tx.chatSession.findFirst({
         where: {
@@ -43,24 +149,42 @@ async function createAgreement(req: NextRequest) {
         select: {
           id: true,
           title: true,
+          _count: {
+            select: {
+              agreements: true,
+            },
+          },
         },
       })
 
       if (!session) {
         throw new AuthError("Session not found", 404)
       }
+
+      if (session._count.agreements >= MAX_AGREEMENTS_PER_SESSION) {
+        throw new AuthError(getSessionAgreementLimitErrorMessage(), 400)
+      }
     }
 
     const created = await tx.agreement.create({
       data: {
         userId: user.id,
-        fileName: parsed.data.fileName,
-        s3Key: parsed.data.s3Key,
+        fileName: currentIntent.fileName,
+        s3Key: currentIntent.s3Key,
         chatSessions: parsed.data.sessionId
           ? {
               connect: [{ id: parsed.data.sessionId }],
             }
           : undefined,
+      },
+    })
+
+    await tx.uploadIntent.update({
+      where: { id: currentIntent.id },
+      data: {
+        status: "CONSUMED",
+        consumedAt: new Date(),
+        agreementId: created.id,
       },
     })
 
@@ -74,16 +198,18 @@ async function createAgreement(req: NextRequest) {
         await tx.chatSession.update({
           where: { id: parsed.data.sessionId },
           data: {
-            title: parsed.data.fileName,
+            title: currentIntent.fileName,
           },
         })
       }
     }
 
-    return created
+    return { agreement: created, created: true }
+  }, {
+    isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
   })
 
-  return NextResponse.json(agreement, { status: 201 })
+  return NextResponse.json(result.agreement, { status: result.created ? 201 : 200 })
 }
 
 async function deleteAgreement(req: NextRequest, id: string) {
