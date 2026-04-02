@@ -28,6 +28,31 @@ const SEVERITY_MAP = {
   high: "HIGH",
 } as const;
 
+const ANALYSIS_CONCURRENCY = 3;
+
+async function mapWithConcurrency<T, R>(
+  items: T[],
+  concurrency: number,
+  mapper: (item: T, index: number) => Promise<R>,
+): Promise<R[]> {
+  const results = new Array<R>(items.length);
+  let nextIndex = 0;
+
+  async function worker() {
+    while (true) {
+      const currentIndex = nextIndex;
+      nextIndex++;
+      if (currentIndex >= items.length) return;
+
+      results[currentIndex] = await mapper(items[currentIndex], currentIndex);
+    }
+  }
+
+  const workerCount = Math.max(1, Math.min(concurrency, items.length));
+  await Promise.all(Array.from({ length: workerCount }, () => worker()));
+  return results;
+}
+
 export async function runAnalysisPipeline(agreementId: string): Promise<void> {
   // Create or update Analysis record → PROCESSING
   const analysis = await prisma.analysis.upsert({
@@ -63,13 +88,15 @@ export async function runAnalysisPipeline(agreementId: string): Promise<void> {
     }
 
     // 4. Per clause: categorize → RAG → LLM (in parallel)
-    const results = await Promise.all(
-      extractedClauses.map(async (clause, index) => {
+    const results = await mapWithConcurrency(
+      extractedClauses,
+      ANALYSIS_CONCURRENCY,
+      async (clause, index) => {
         const category = await categorizeClause(clause.text);
         const context = await retrieveContext(clause.text, { category });
         const result = await analyzeClause(clause.text, context);
         return { index, clauseText: clause.text, source: clause.source, result };
-      }),
+      },
     );
 
     // 5. Store results

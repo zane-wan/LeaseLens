@@ -34,8 +34,26 @@ export interface ExtractedClause {
     | "llm_extracted";
 }
 
+type FormType =
+  | "form_400"
+  | "form_401"
+  | "osl"
+  | "form_410"
+  | "form_324"
+  | "form_105"
+  | "osl_appendix"
+  | "unknown";
+
+/** Document types that never contain custom lease clauses. */
+const IRRELEVANT_FORMS: ReadonlySet<FormType> = new Set([
+  "form_410", // Rental Application — personal info only
+  "form_324", // Confirmation of Co-operation — brokerage info
+  "form_105", // Agreement of Purchase and Sale — different transaction
+  "osl_appendix", // OSL Appendix: General Information — government boilerplate
+]);
+
 interface FormRegion {
-  form: "form_400" | "form_401" | "osl" | "unknown";
+  form: FormType;
   startIdx: number;
   endIdx: number;
 }
@@ -63,7 +81,15 @@ export async function extractClauses(
     return deduplicateClauses(rawClauses);
   }
 
-  // Fallback: LLM extraction
+  // Only fall back to LLM if the document is truly unrecognized.
+  // If we identified known forms but found no clauses, that's a valid
+  // result (e.g., a pure RTA with no additional terms).
+  const hasKnownForms = regions.some((r) => r.form !== "unknown");
+  if (hasKnownForms) {
+    return [];
+  }
+
+  // Fallback: LLM extraction for completely unrecognized documents
   return extractClausesWithLLM(leaseText);
 }
 
@@ -71,73 +97,106 @@ export async function extractClauses(
 // Phase 1: Form Boundary Detection
 // ---------------------------------------------------------------------------
 
-const FORM_PATTERNS: { form: FormRegion["form"]; pattern: RegExp }[] = [
-  { form: "form_400", pattern: /(?:^|\n)\s*(?:OREA\s+)?Form\s+400\b/gim },
+/**
+ * Patterns used to classify a single page's form type.
+ * Each page is checked against all patterns; the first match wins.
+ *
+ * Two tiers:
+ *   1. Form NUMBER patterns (e.g., "Form 400") — most reliable, always in
+ *      page header/footer. Checked first to avoid false positives from
+ *      title patterns appearing in body text (e.g., Form 400 mentions
+ *      "Rental Application" in its body, which would falsely match Form 410).
+ *   2. Title/marker patterns — fallback for pages without a form number.
+ */
+const PAGE_FORM_PATTERNS: { form: FormRegion["form"]; pattern: RegExp }[] = [
+  // --- Tier 1: Form number patterns (highest priority) ---
+  { form: "form_410", pattern: /Form\s+410\b/im },
+  { form: "form_324", pattern: /Form\s+324\b/im },
+  { form: "form_105", pattern: /Form\s+105\b/im },
+  { form: "form_400", pattern: /Form\s+400\b/im },
+  { form: "form_401", pattern: /Form\s+401\b/im },
+
+  // --- Tier 2: Title / structural marker patterns (fallback) ---
   {
-    form: "form_400",
-    pattern: /(?:^|\n)\s*(?:AGREEMENT|OFFER)\s+TO\s+LEASE\b/gim,
+    form: "osl_appendix",
+    pattern: /Appendix:?\s*General\s+Information/im,
   },
-  { form: "form_401", pattern: /(?:^|\n)\s*(?:OREA\s+)?Form\s+401\b/gim },
   {
     form: "osl",
-    pattern:
-      /(?:^|\n)\s*(?:Ontario\s+)?Standard\s+(?:Form\s+of\s+)?Lease\b/gim,
+    pattern: /(?:Ontario\s+)?Standard\s+(?:Form\s+of\s+)?Lease/im,
   },
-  {
-    form: "osl",
-    pattern: /(?:^|\n)\s*Residential\s+Tenancy\s+Agreement\b/gim,
-  },
+  { form: "osl", pattern: /Residential\s+Tenancy\s+Agreement/im },
+  { form: "osl", pattern: /2229E/ },
+  { form: "osl", pattern: /www\.ontario\.ca\/standardlease/im },
 ];
 
+/** Page joiner inserted by pdf-parse between pages (default format). */
+const PAGE_JOINER_PATTERN = /\n-- \d+ of \d+ --\n/;
+
 /**
- * Segment document text into form regions (Form 400, Form 401, OSL).
- * Returns a single "unknown" region if no form headers are found.
+ * Classify a single page of text into a form type.
+ * Returns the first matching form, or "unknown" if nothing matches.
+ */
+export function classifyPage(pageText: string): FormType {
+  for (const { form, pattern } of PAGE_FORM_PATTERNS) {
+    if (pattern.test(pageText)) return form;
+  }
+  return "unknown";
+}
+
+/**
+ * Split full PDF text into individual pages using the pdf-parse page joiner.
+ * Returns an array of { text, startIdx, endIdx } for each page.
+ */
+export function splitPages(
+  text: string,
+): { text: string; startIdx: number; endIdx: number }[] {
+  const pages: { text: string; startIdx: number; endIdx: number }[] = [];
+  const joinerRegex = new RegExp(PAGE_JOINER_PATTERN.source, "g");
+  let lastEnd = 0;
+
+  for (const m of text.matchAll(joinerRegex)) {
+    if (m.index !== undefined) {
+      pages.push({ text: text.slice(lastEnd, m.index), startIdx: lastEnd, endIdx: m.index });
+      lastEnd = m.index + m[0].length;
+    }
+  }
+  // Last page (or the only page if no joiner found)
+  pages.push({ text: text.slice(lastEnd), startIdx: lastEnd, endIdx: text.length });
+
+  return pages;
+}
+
+/**
+ * Segment document text into form regions by classifying each page.
+ *
+ * Per-page detection: each PDF page has its form identifier (e.g., "Form 400"
+ * in the header/footer), so we split by the pdf-parse page joiner, classify
+ * each page, then merge consecutive pages of the same form type into regions.
+ *
+ * Falls back to treating the entire text as a single "unknown" region when
+ * no page joiners are present (e.g., single-page documents or plain text).
  */
 export function detectFormBoundaries(text: string): FormRegion[] {
-  const hits: { form: FormRegion["form"]; idx: number }[] = [];
+  const pages = splitPages(text);
 
-  for (const { form, pattern } of FORM_PATTERNS) {
-    // Reset lastIndex for global regex reuse
-    pattern.lastIndex = 0;
-    for (const m of text.matchAll(pattern)) {
-      if (m.index !== undefined) {
-        // Avoid duplicate hits for the same form at nearby positions
-        const isDuplicate = hits.some(
-          (h) => h.form === form && Math.abs(h.idx - m.index!) < 200,
-        );
-        if (!isDuplicate) {
-          hits.push({ form, idx: m.index });
-        }
-      }
-    }
-  }
+  // Classify each page
+  const classified = pages.map((p) => ({
+    form: classifyPage(p.text),
+    startIdx: p.startIdx,
+    endIdx: p.endIdx,
+  }));
 
-  if (hits.length === 0) {
-    return [{ form: "unknown", startIdx: 0, endIdx: text.length }];
-  }
-
-  // Sort by position
-  hits.sort((a, b) => a.idx - b.idx);
-
-  // Deduplicate overlapping form detections at the same position
-  // (e.g., "Form 400" and "AGREEMENT TO LEASE" on the same page)
-  const deduped: typeof hits = [];
-  for (const hit of hits) {
-    const prev = deduped[deduped.length - 1];
-    if (prev && prev.form === hit.form && hit.idx - prev.idx < 500) {
-      continue; // skip — same form detected nearby
-    }
-    deduped.push(hit);
-  }
-
-  // Build regions
+  // Merge consecutive pages of the same form type into regions
   const regions: FormRegion[] = [];
-  for (let i = 0; i < deduped.length; i++) {
-    regions.push({
-      form: deduped[i].form,
-      startIdx: deduped[i].idx,
-      endIdx: i < deduped.length - 1 ? deduped[i + 1].idx : text.length,
-    });
+  for (const page of classified) {
+    const prev = regions[regions.length - 1];
+    if (prev && prev.form === page.form) {
+      // Extend the previous region to include this page
+      prev.endIdx = page.endIdx;
+    } else {
+      regions.push({ form: page.form, startIdx: page.startIdx, endIdx: page.endIdx });
+    }
   }
 
   return regions;
@@ -149,6 +208,7 @@ export function detectFormBoundaries(text: string): FormRegion[] {
 
 /**
  * Route each detected form region to the appropriate extractors.
+ * Irrelevant document types (Form 410, 324, 105, OSL Appendix) are skipped.
  */
 function extractFromRegions(
   text: string,
@@ -157,6 +217,9 @@ function extractFromRegions(
   const clauses: ExtractedClause[] = [];
 
   for (const region of regions) {
+    // Skip irrelevant document types entirely
+    if (IRRELEVANT_FORMS.has(region.form)) continue;
+
     const regionText = text.slice(region.startIdx, region.endIdx);
 
     switch (region.form) {
@@ -168,7 +231,9 @@ function extractFromRegions(
         clauses.push(...extractSchedules(regionText, "form_401"));
         break;
       case "osl":
-        clauses.push(...extractSection15(regionText));
+        // OSL Section 15 is never extracted — it is either the standard RTA
+        // template explanation or a checkbox referencing separate attachments.
+        // Real additional terms live in Schedule A/B/C or other attached forms.
         clauses.push(...extractSchedules(regionText));
         break;
       case "unknown":
@@ -184,11 +249,92 @@ function extractFromRegions(
 }
 
 // ---------------------------------------------------------------------------
+// Text Cleaning — strip OREA page decoration & form-field placeholders
+// ---------------------------------------------------------------------------
+
+/**
+ * Remove OREA boilerplate that appears on every page of OREA forms:
+ * - Copyright / trademark block
+ * - Form label headers ("Agreement to Lease - Residential", "Form 400", etc.)
+ * - INITIALS OF TENANT(S) / LANDLORD(S) lines
+ * - "This form must be initialled..." / "This Schedule is attached to..."
+ * - Dot-filled placeholder lines (empty form fields)
+ * - Page headers like "Form 400 Revised Feb 2024 Page 1 of 5"
+ */
+function cleanOreaBoilerplate(text: string): string {
+  return (
+    text
+      // pdf-parse page joiners
+      .replace(/^\s*--\s*\d+\s+of\s+\d+\s*--\s*$/gm, "")
+      // OREA copyright / trademark block (multi-line)
+      .replace(
+        /The trademarks REALTOR®[\s\S]*?OREA bears no liability for your use of this form\./g,
+        "",
+      )
+      // Shorter copyright variant
+      .replace(
+        /© \d{4}, Ontario Real Estate Association[\s\S]*?OREA bears no liability[^\n]*/g,
+        "",
+      )
+      // Page header: "Form 400 Revised Feb 2024 Page 1 of 5" or "Form 401 Revised 2023 Page 1 of 3"
+      .replace(
+        /Form\s+\d+\s+Revised(?:\s+\w+)?\s+\d{4}\s+Page\s+\d+\s+of\s+\d+/g,
+        "",
+      )
+      // Form label: "Agreement to Lease - Residential" or similar on its own line
+      .replace(/^\s*Agreement\s+to\s+Lease\s*[-–—]\s*Residential\s*$/gm, "")
+      // "Form 400 for use in the Province of Ontario" on its own line
+      .replace(/^\s*Form\s+\d+\s*\n\s*for use in the Province of Ontario\s*$/gm, "")
+      // INITIALS lines
+      .replace(/^\s*INITIALS\s+OF[^\n]*$/gm, "")
+      // "This form must be initialled by all parties..."
+      .replace(/^\s*This form must be initialled[^\n]*/gm, "")
+      // "This Schedule is attached to and forms part of..."
+      .replace(/^\s*This Schedule is attached to and forms part of[^\n]*/gm, "")
+      // Dot-filled lines (10+ dots, possibly with some text around them)
+      .replace(/^[.\s]{10,}$/gm, "")
+      // Lines that are mostly dots with minimal text (e.g., "................... (Witness)")
+      .replace(/^.*\.{10,}.*$/gm, "")
+      // Collapse multiple blank lines
+      .replace(/\n{3,}/g, "\n\n")
+      .trim()
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Section Extractors
 // ---------------------------------------------------------------------------
 
 /**
+ * Detect whether a region belongs to the Ontario Standard RTA form
+ * by looking for structural markers unique to the government template:
+ *   1. "2229E" — form number printed in page footers
+ *   2. "Residential Tenancy Agreement" + "(Standard Form of Lease)" — title header
+ *   3. "www.ontario.ca/standardlease" — URL on the last page
+ *
+ * If the region IS a standard RTA form, its Section 15 is just the template
+ * explanation (checkboxes, examples of void terms) — no real custom clauses.
+ * Actual additional terms, if any, live in separate attachments outside the form.
+ */
+const RTA_FORM_MARKERS = [
+  /2229E/,
+  /Residential\s+Tenancy\s+Agreement[\s\S]{0,80}Standard\s+Form\s+of\s+Lease/i,
+  /www\.ontario\.ca\/standardlease/i,
+];
+
+export function isStandardRtaForm(text: string): boolean {
+  let matchCount = 0;
+  for (const marker of RTA_FORM_MARKERS) {
+    if (marker.test(text)) matchCount++;
+  }
+  // 2 out of 3 markers is sufficient to identify the standard form
+  return matchCount >= 2;
+}
+
+/**
  * Extract clauses from OSL Section 15 "Additional Terms".
+ * Detects and skips the standard OSL template explanation that contains
+ * no actual custom clauses (the real terms are in separate attachments).
  */
 function extractSection15(text: string): ExtractedClause[] {
   const headerPatterns = [
@@ -254,11 +400,13 @@ function extractSection8(text: string): ExtractedClause[] {
   if (startIdx === -1) return [];
 
   const endPatterns = [
-    /(?:^|\n)\s*9\.\s/m,
+    // Any numbered section ≥ 9 (handles PDFs where sections 9/10 are missing)
+    /(?:^|\n)\s*(?:9|[1-9]\d+)\.\s/m,
     /(?:^|\n)\s*(?:Signature|SIGNATURE)/im,
     /(?:^|\n)\s*(?:Landlord|LANDLORD)\s*(?:'s\s+)?(?:Signature|Sign)/im,
     /(?:^|\n)\s*(?:Tenant|TENANT)\s*(?:'s\s+)?(?:Signature|Sign)/im,
     /(?:^|\n)\s*(?:Schedule|SCHEDULE)\s+[A-C]\b/im,
+    /(?:^|\n)\s*SIGNED,?\s+SEALED/im,
   ];
 
   let endIdx = text.length;
@@ -270,8 +418,14 @@ function extractSection8(text: string): ExtractedClause[] {
     }
   }
 
-  const sectionText = text.slice(startIdx, endIdx).trim();
+  let sectionText = cleanOreaBoilerplate(text.slice(startIdx, endIdx).trim());
+  // Strip leading colon left over from "ADDITIONAL TERMS:" header
+  sectionText = sectionText.replace(/^:\s*/, "").trim();
   if (!sectionText) return [];
+
+  // Skip if text starts mid-sentence (lowercase / no subject) — this is
+  // a boilerplate fragment from the form, not a real additional term.
+  if (/^[a-z]/.test(sectionText)) return [];
 
   return splitIntoClauses(sectionText, "form400_section_8");
 }
@@ -304,11 +458,25 @@ function extractSchedules(
   formContext?: FormContext,
 ): ExtractedClause[] {
   const clauses: ExtractedClause[] = [];
+  const cleanedText = cleanOreaBoilerplate(text);
 
   const scheduleConfigs: { pattern: RegExp; letter: "a" | "b" | "c" }[] = [
-    { pattern: /(?:^|\n)\s*(?:Schedule|SCHEDULE)\s+A\b/gim, letter: "a" },
-    { pattern: /(?:^|\n)\s*(?:Schedule|SCHEDULE)\s+B\b/gim, letter: "b" },
-    { pattern: /(?:^|\n)\s*(?:Schedule|SCHEDULE)\s+C\b/gim, letter: "c" },
+    {
+      // Supports both "Schedule A" and Form 401-style "Schedule ______" + "A"
+      pattern:
+        /(?:^|\n)\s*(?:Schedule|SCHEDULE)(?:\s+A\b|\s+[_\-.]{2,}(?:\n\s*)+A\b)/gim,
+      letter: "a",
+    },
+    {
+      pattern:
+        /(?:^|\n)\s*(?:Schedule|SCHEDULE)(?:\s+B\b|\s+[_\-.]{2,}(?:\n\s*)+B\b)/gim,
+      letter: "b",
+    },
+    {
+      pattern:
+        /(?:^|\n)\s*(?:Schedule|SCHEDULE)(?:\s+C\b|\s+[_\-.]{2,}(?:\n\s*)+C\b)/gim,
+      letter: "c",
+    },
   ];
 
   // Collect all schedule positions
@@ -321,12 +489,12 @@ function extractSchedules(
 
   for (const { pattern, letter } of scheduleConfigs) {
     pattern.lastIndex = 0;
-    for (const match of text.matchAll(pattern)) {
+    for (const match of cleanedText.matchAll(pattern)) {
       if (match.index !== undefined) {
         positions.push({
           start: match.index,
           headerEnd: match.index + match[0].length,
-          end: text.length,
+          end: cleanedText.length,
           source: scheduleSource(letter, formContext),
         });
       }
@@ -342,9 +510,9 @@ function extractSchedules(
   for (let i = 0; i < positions.length; i++) {
     const contentStart = positions[i].headerEnd;
     const contentEnd =
-      i < positions.length - 1 ? positions[i + 1].start : text.length;
+      i < positions.length - 1 ? positions[i + 1].start : cleanedText.length;
 
-    const scheduleText = text.slice(contentStart, contentEnd).trim();
+    const scheduleText = cleanedText.slice(contentStart, contentEnd).trim();
     if (scheduleText.length > 20) {
       clauses.push(...splitIntoClauses(scheduleText, positions[i].source));
     }
@@ -424,7 +592,48 @@ function splitIntoClauses(
     return paragraphs.map((p) => ({ text: p, source }));
   }
 
-  // Strategy 3: Treat the whole block as one clause
+  // Strategy 3: Sentence-boundary splitting for OREA-style continuous text.
+  // In OREA Schedule A PDFs, clauses are separated by single newlines only.
+  // Detect boundaries where a sentence-ending period is followed (on the
+  // same or next line) by a new sentence starting with a capital letter
+  // at the beginning of a line (not a continuation of a wrapped line).
+  //
+  // Heuristic: a "new clause start" is a line that begins with a capital
+  // letter AND the previous line ended with a period (sentence end).
+  const lines = text.split("\n");
+  if (lines.length >= 2) {
+    const clauseChunks: string[] = [];
+    let current: string[] = [lines[0]];
+
+    for (let i = 1; i < lines.length; i++) {
+      const prevLine = lines[i - 1].trimEnd();
+      const currLine = lines[i];
+      // New clause starts when:
+      //   - previous line ends with "." (sentence end)
+      //   - current line starts with a capital letter (new sentence, no indent)
+      //   - current line is not just a short fragment (> 30 chars)
+      const prevEndsSentence = /\.\s*$/.test(prevLine);
+      const currStartsNew = /^[A-Z]/.test(currLine);
+      const currLongEnough = currLine.trim().length > 30;
+
+      if (prevEndsSentence && currStartsNew && currLongEnough) {
+        const chunk = current.join("\n").trim();
+        if (chunk.length > 15) clauseChunks.push(chunk);
+        current = [currLine];
+      } else {
+        current.push(currLine);
+      }
+    }
+    // Push last chunk
+    const lastChunk = current.join("\n").trim();
+    if (lastChunk.length > 15) clauseChunks.push(lastChunk);
+
+    if (clauseChunks.length > 1) {
+      return clauseChunks.map((p) => ({ text: p, source }));
+    }
+  }
+
+  // Strategy 4: Treat the whole block as one clause
   return text.trim().length > 15 ? [{ text: text.trim(), source }] : [];
 }
 
