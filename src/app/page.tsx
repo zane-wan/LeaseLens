@@ -1,6 +1,11 @@
+import Link from "next/link";
+import { ArrowRight, LayoutDashboard } from "lucide-react";
 import { FeatureSection } from "@/components/feature-section";
+import { getAuthUserFromServer } from "@/lib/auth";
 
-export default function Home() {
+export default async function Home() {
+  const user = await getAuthUserFromServer();
+
   return (
     <main className="flex min-h-screen flex-col items-center">
       {/* Hero Section */}
@@ -9,6 +14,24 @@ export default function Home() {
         <p className="mt-4 text-xl text-muted-foreground max-w-[600px]">
           AI-powered lease agreement analysis for Ontario residential tenancy law
         </p>
+        {user ? (
+          <Link
+            href="/dashboard"
+            className="mt-8 inline-flex h-12 items-center gap-2 rounded-lg bg-primary px-6 text-base font-medium text-primary-foreground shadow transition-colors hover:bg-primary/90"
+          >
+            <LayoutDashboard className="size-5" />
+            Go to Dashboard
+            <ArrowRight className="size-5" />
+          </Link>
+        ) : (
+          <Link
+            href="/login"
+            className="mt-8 inline-flex h-12 items-center gap-2 rounded-lg bg-primary px-6 text-base font-medium text-primary-foreground shadow transition-colors hover:bg-primary/90"
+          >
+            Get Started
+            <ArrowRight className="size-5" />
+          </Link>
+        )}
       </section>
 
       {/* Feature Sections */}
