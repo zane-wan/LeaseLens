@@ -4,12 +4,13 @@ import { AuthError, requireAuthFromRequest } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { streamText } from "ai"
 import { modelConfig, systemPrompts } from "@/config/llm"
+import { MAX_AGREEMENTS_PER_SESSION } from "@/lib/agreements"
 import { retrieveContext } from "@/lib/rag"
 import { deleteS3Object } from "@/lib/s3"
 
 const sessionSchema = z.object({
   title: z.string().trim().min(1).max(120).optional(),
-  agreementIds: z.array(z.string().min(1)).max(1).optional(),
+  agreementIds: z.array(z.string().min(1)).max(MAX_AGREEMENTS_PER_SESSION).optional(),
 })
 
 const renameSessionSchema = z.object({

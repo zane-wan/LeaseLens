@@ -22,6 +22,10 @@ import { AgreementItem } from "@/features/upload/types"
 import { ClauseCard, type ClauseResultData } from "@/features/analysis/components/ClauseCard"
 import { RiskScoreRing } from "@/features/analysis/components/RiskScoreRing"
 import {
+  MAX_AGREEMENTS_PER_SESSION,
+  getSessionAgreementLimitErrorMessage,
+} from "@/lib/agreements"
+import {
   Bot,
   ChevronDown,
   ChevronUp,
@@ -97,6 +101,7 @@ export default function DashboardPage() {
   const [savingSessionName, setSavingSessionName] = useState(false)
 
   const activeAgreements = activeSession?.agreements ?? []
+  const remainingAgreementSlots = Math.max(MAX_AGREEMENTS_PER_SESSION - activeAgreements.length, 0)
   const [analyzingAll, setAnalyzingAll] = useState(false)
 
   const fetchSessions = useCallback(async () => {
@@ -275,10 +280,33 @@ export default function DashboardPage() {
     setPageError(null)
 
     try {
-      const results = await uploadMany(files, activeSessionId)
-      if (results.length === 0) return
-      reset()
-      await syncSessions(activeSessionId)
+      if (remainingAgreementSlots === 0) {
+        setPageError(getSessionAgreementLimitErrorMessage())
+        return
+      }
+
+      if (files.length > remainingAgreementSlots) {
+        setPageError(
+          `This session has room for ${remainingAgreementSlots} more file${remainingAgreementSlots === 1 ? "" : "s"}`
+        )
+        return
+      }
+
+      const result = await uploadMany(files, activeSessionId)
+
+      if (result.successes.length > 0) {
+        await syncSessions(activeSessionId)
+      }
+
+      if (result.failures.length > 0) {
+        const failedFiles = result.failures.map((failure) => failure.fileName).join(", ")
+        setPageError(`Some files failed to upload: ${failedFiles}`)
+        return
+      }
+
+      if (result.successes.length > 0) {
+        reset()
+      }
     } catch (error) {
       setPageError(error instanceof Error ? error.message : "Upload failed")
     }
@@ -306,13 +334,26 @@ export default function DashboardPage() {
     setAnalyzingAll(true)
     setPageError(null)
     try {
-      await Promise.all(
+      const results = await Promise.all(
         pending.map((a) =>
           fetch(`/api/agreements/${a.id}/analyze`, { method: "POST" })
         )
       )
+      const failures: string[] = []
+
+      for (let i = 0; i < results.length; i++) {
+        if (results[i].ok) continue
+
+        const json = await results[i].json().catch(() => null)
+        failures.push(`${pending[i].fileName}${json?.error ? ` (${json.error})` : ""}`)
+      }
+
       if (activeSessionId) {
         await syncSessions(activeSessionId)
+      }
+
+      if (failures.length > 0) {
+        setPageError(`Failed to queue analysis for: ${failures.join(", ")}`)
       }
     } catch {
       setPageError("Failed to start analysis")
@@ -515,7 +556,7 @@ export default function DashboardPage() {
               <div>
                 <h3 className="text-lg font-semibold">Upload Leases</h3>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  Select one or more PDF files to upload.
+                  Select one or more PDF files to upload. Up to {MAX_AGREEMENTS_PER_SESSION} files per session.
                 </p>
               </div>
               <DropZone
@@ -523,7 +564,7 @@ export default function DashboardPage() {
                 onFilesDrop={handleFilesDrop}
                 onReset={reset}
                 multiple
-                maxFiles={10}
+                maxFiles={Math.max(remainingAgreementSlots, 1)}
               />
             </div>
 

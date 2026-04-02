@@ -1,6 +1,10 @@
 "use client"
 
 import { useState, useCallback } from "react"
+import {
+  MAX_AGREEMENTS_PER_SESSION,
+  getSessionAgreementLimitErrorMessage,
+} from "@/lib/agreements"
 import { UploadState } from "../types"
 
 interface UploadResult {
@@ -8,15 +12,25 @@ interface UploadResult {
   s3Key: string
 }
 
+interface UploadFailure {
+  fileName: string
+  error: string
+}
+
+interface UploadManyResult {
+  successes: UploadResult[]
+  failures: UploadFailure[]
+}
+
 interface UseUploadReturn {
   uploadState: UploadState
-  upload: (file: File, sessionId?: string) => Promise<UploadResult | null>
-  uploadMany: (files: File[], sessionId?: string) => Promise<UploadResult[]>
+  upload: (file: File, sessionId?: string) => Promise<UploadResult>
+  uploadMany: (files: File[], sessionId?: string) => Promise<UploadManyResult>
   reset: () => void
 }
 
 const MAX_SIZE_BYTES = 20 * 1024 * 1024  // 20MB
-const MAX_FILES_PER_BATCH = 10
+const MAX_FILES_PER_BATCH = MAX_AGREEMENTS_PER_SESSION
 
 export function useUpload(): UseUploadReturn {
   const [uploadState, setUploadState] = useState<UploadState>({
@@ -29,14 +43,12 @@ export function useUpload(): UseUploadReturn {
     setUploadState({ status: "idle", progress: 0, errorMessage: null })
   }, [])
 
-  const upload = useCallback(async (file: File, sessionId?: string): Promise<UploadResult | null> => {
+  const upload = useCallback(async (file: File, sessionId?: string): Promise<UploadResult> => {
     if (file.type !== "application/pdf") {
-      setUploadState({ status: "error", progress: 0, errorMessage: "Only PDF files are supported" })
-      return null
+      throw new Error("Only PDF files are supported")
     }
     if (file.size > MAX_SIZE_BYTES) {
-      setUploadState({ status: "error", progress: 0, errorMessage: "File size cannot be greater than 20MB" })
-      return null
+      throw new Error("File size cannot be greater than 20MB")
     }
 
     try {
@@ -80,31 +92,46 @@ export function useUpload(): UseUploadReturn {
     }
   }, [])
 
-  const uploadMany = useCallback(async (files: File[], sessionId?: string): Promise<UploadResult[]> => {
+  const uploadMany = useCallback(async (files: File[], sessionId?: string): Promise<UploadManyResult> => {
     if (files.length > MAX_FILES_PER_BATCH) {
-      setUploadState({ status: "error", progress: 0, errorMessage: `You can upload at most ${MAX_FILES_PER_BATCH} files at once` })
-      return []
+      const message = getSessionAgreementLimitErrorMessage(MAX_FILES_PER_BATCH)
+      setUploadState({ status: "error", progress: 0, errorMessage: message })
+      return {
+        successes: [],
+        failures: files.map((file) => ({ fileName: file.name, error: message })),
+      }
     }
     setUploadState({ status: "uploading", progress: 0, errorMessage: null })
 
-    const results: UploadResult[] = []
+    const successes: UploadResult[] = []
+    const failures: UploadFailure[] = []
 
-    try {
-      for (let i = 0; i < files.length; i++) {
-        const progress = Math.round(((i) / files.length) * 90)
-        setUploadState({ status: "uploading", progress, errorMessage: null })
+    for (let i = 0; i < files.length; i++) {
+      const progress = Math.round((i / files.length) * 90)
+      setUploadState({ status: "uploading", progress, errorMessage: null })
 
+      try {
         const result = await upload(files[i], sessionId)
-        if (result) results.push(result)
+        successes.push(result)
+      } catch (err) {
+        failures.push({
+          fileName: files[i].name,
+          error: err instanceof Error ? err.message : "Upload failed, please try again",
+        })
       }
-
-      setUploadState({ status: "success", progress: 100, errorMessage: null })
-      return results
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Upload failed, please try again"
-      setUploadState({ status: "error", progress: 0, errorMessage: message })
-      return results
     }
+
+    if (failures.length > 0) {
+      const summary =
+        successes.length > 0
+          ? `${successes.length} file(s) uploaded, ${failures.length} failed`
+          : failures[0]?.error ?? "Upload failed, please try again"
+      setUploadState({ status: "error", progress: 100, errorMessage: summary })
+      return { successes, failures }
+    }
+
+    setUploadState({ status: "success", progress: 100, errorMessage: null })
+    return { successes, failures: [] }
   }, [upload])
 
   return { uploadState, upload, uploadMany, reset }

@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from "next/server"
+import { Prisma } from "@prisma/client"
 import { z } from "zod"
 import { AuthError, requireAuthFromRequest } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import {
+  MAX_AGREEMENTS_PER_SESSION,
+  getSessionAgreementLimitErrorMessage,
+} from "@/lib/agreements"
 import { deleteS3Object } from "@/lib/s3"
 
 const createSchema = z.object({
@@ -43,11 +48,20 @@ async function createAgreement(req: NextRequest) {
         select: {
           id: true,
           title: true,
+          _count: {
+            select: {
+              agreements: true,
+            },
+          },
         },
       })
 
       if (!session) {
         throw new AuthError("Session not found", 404)
+      }
+
+      if (session._count.agreements >= MAX_AGREEMENTS_PER_SESSION) {
+        throw new AuthError(getSessionAgreementLimitErrorMessage(), 400)
       }
     }
 
@@ -81,6 +95,8 @@ async function createAgreement(req: NextRequest) {
     }
 
     return created
+  }, {
+    isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
   })
 
   return NextResponse.json(agreement, { status: 201 })
