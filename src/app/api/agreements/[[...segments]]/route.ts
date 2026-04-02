@@ -43,18 +43,11 @@ async function createAgreement(req: NextRequest) {
         select: {
           id: true,
           title: true,
-          agreements: {
-            select: { id: true },
-          },
         },
       })
 
       if (!session) {
         throw new AuthError("Session not found", 404)
-      }
-
-      if (session.agreements.length > 0) {
-        throw new AuthError("This session already has an uploaded file", 409)
       }
     }
 
