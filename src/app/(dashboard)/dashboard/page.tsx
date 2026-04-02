@@ -24,10 +24,12 @@ import { RiskScoreRing } from "@/features/analysis/components/RiskScoreRing"
 import {
   Bot,
   ChevronDown,
+  ChevronUp,
   FileText,
   History,
   Loader2,
   MessageSquarePlus,
+  Play,
   Plus,
   Send,
   Trash2,
@@ -81,7 +83,7 @@ function toChatMessages(messages: SessionMessage[]): Message[] {
 }
 
 export default function DashboardPage() {
-  const { uploadState, upload, reset } = useUpload()
+  const { uploadState, uploadMany, reset } = useUpload()
   const [sessions, setSessions] = useState<SessionListItem[]>([])
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null)
   const [activeSession, setActiveSession] = useState<SessionDetail | null>(null)
@@ -94,7 +96,8 @@ export default function DashboardPage() {
   const [sessionName, setSessionName] = useState("")
   const [savingSessionName, setSavingSessionName] = useState(false)
 
-  const activeAgreement = activeSession?.agreements[0] ?? null
+  const activeAgreements = activeSession?.agreements ?? []
+  const [analyzingAll, setAnalyzingAll] = useState(false)
 
   const fetchSessions = useCallback(async () => {
     const res = await fetch("/api/chats/sessions")
@@ -158,15 +161,17 @@ export default function DashboardPage() {
     init()
   }, [syncSessions])
 
+  const hasProcessing = activeAgreements.some((a) => a.status === "PROCESSING")
+
   useEffect(() => {
-    if (!activeSessionId || activeAgreement?.status !== "PROCESSING") return
+    if (!activeSessionId || !hasProcessing) return
 
     const timer = setInterval(() => {
       void Promise.all([fetchSessions(), loadSession(activeSessionId, true)]).catch(() => null)
     }, 3000)
 
     return () => clearInterval(timer)
-  }, [activeAgreement?.status, activeSessionId, fetchSessions, loadSession])
+  }, [hasProcessing, activeSessionId, fetchSessions, loadSession])
 
   async function handleCreateSession() {
     setCreatingSession(true)
@@ -265,20 +270,13 @@ export default function DashboardPage() {
       setPageError("Create or select a session first")
       return
     }
-    if (files.length !== 1) {
-      setPageError("Each session can only contain one PDF file")
-      return
-    }
-    if (activeAgreement) {
-      setPageError("This session already has a file. Create a new session to upload another lease.")
-      return
-    }
+    if (files.length === 0) return
 
     setPageError(null)
 
     try {
-      const result = await upload(files[0], activeSessionId)
-      if (!result) return
+      const results = await uploadMany(files, activeSessionId)
+      if (results.length === 0) return
       reset()
       await syncSessions(activeSessionId)
     } catch (error) {
@@ -295,6 +293,31 @@ export default function DashboardPage() {
     }
     if (activeSessionId) {
       await syncSessions(activeSessionId)
+    }
+  }
+
+  async function handleAnalyzeAll() {
+    if (!activeSession) return
+    const pending = activeSession.agreements.filter(
+      (a) => a.status === "PENDING" || a.status === "FAILED"
+    )
+    if (pending.length === 0) return
+
+    setAnalyzingAll(true)
+    setPageError(null)
+    try {
+      await Promise.all(
+        pending.map((a) =>
+          fetch(`/api/agreements/${a.id}/analyze`, { method: "POST" })
+        )
+      )
+      if (activeSessionId) {
+        await syncSessions(activeSessionId)
+      }
+    } catch {
+      setPageError("Failed to start analysis")
+    } finally {
+      setAnalyzingAll(false)
     }
   }
 
@@ -337,7 +360,7 @@ export default function DashboardPage() {
         <div>
           <h1 className="text-2xl font-bold">Lease Sessions</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            One session can hold zero or one lease file.
+            Upload and analyse your lease files.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -369,7 +392,7 @@ export default function DashboardPage() {
               ) : (
                 <div className="space-y-1">
                   {sessions.map((session) => {
-                    const sessionAgreement = session.agreements[0]
+                    const fileCount = session.agreements.length
                     const isActive = session.id === activeSessionId
 
                     return (
@@ -386,7 +409,9 @@ export default function DashboardPage() {
                         >
                           <p className="truncate text-sm font-medium">{session.title}</p>
                           <p className="truncate text-xs text-muted-foreground">
-                            {sessionAgreement ? sessionAgreement.fileName : "No file uploaded"}
+                            {fileCount === 0
+                              ? "No files uploaded"
+                              : `${fileCount} file${fileCount !== 1 ? "s" : ""}`}
                           </p>
                         </button>
                         <Button
@@ -431,7 +456,7 @@ export default function DashboardPage() {
             <MessageSquarePlus className="mx-auto size-10 text-muted-foreground" />
             <h2 className="mt-4 text-lg font-semibold">Create a session to begin</h2>
             <p className="mt-2 text-sm text-muted-foreground">
-              Each session behaves like an individual lease workspace and can hold zero or one file.
+              Each session behaves like a lease workspace where you can upload and analyse files.
             </p>
             <Button type="button" className="mt-4 gap-2" onClick={handleCreateSession} disabled={creatingSession}>
               <Plus className="size-4" />
@@ -473,9 +498,9 @@ export default function DashboardPage() {
                     </Button>
                   </div>
                   <p className="mt-1 text-sm text-muted-foreground">
-                    {activeAgreement
-                      ? `Current file: ${activeAgreement.fileName}`
-                      : "This session is empty. Upload one PDF to attach it to this session."}
+                    {activeAgreements.length > 0
+                      ? `${activeAgreements.length} file${activeAgreements.length !== 1 ? "s" : ""} uploaded`
+                      : "This session is empty. Upload PDF files to get started."}
                   </p>
                 </div>
                 {activeSession ? (
@@ -486,38 +511,60 @@ export default function DashboardPage() {
               </div>
             </div>
 
-            {!activeAgreement ? (
-              <div className="space-y-4 rounded-2xl border bg-card p-6">
-                <div>
-                  <h3 className="text-lg font-semibold">Upload Lease</h3>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    This workspace accepts one PDF. Create another session for another lease.
-                  </p>
-                </div>
-                <DropZone
-                  uploadState={uploadState}
-                  onFilesDrop={handleFilesDrop}
-                  onReset={reset}
-                  multiple={false}
-                  maxFiles={1}
-                />
+            <div className="space-y-4 rounded-2xl border bg-card p-6">
+              <div>
+                <h3 className="text-lg font-semibold">Upload Leases</h3>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Select one or more PDF files to upload.
+                </p>
               </div>
-            ) : (
+              <DropZone
+                uploadState={uploadState}
+                onFilesDrop={handleFilesDrop}
+                onReset={reset}
+                multiple
+                maxFiles={10}
+              />
+            </div>
+
+            {activeAgreements.length > 0 && (
               <>
                 <div className="rounded-2xl border bg-card p-6">
-                  <div className="mb-4 flex items-center gap-2">
-                    <FileText className="size-4 text-muted-foreground" />
-                    <h3 className="text-lg font-semibold">Lease File</h3>
+                  <div className="mb-4 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <FileText className="size-4 text-muted-foreground" />
+                      <h3 className="text-lg font-semibold">Lease Files</h3>
+                    </div>
+                    {activeAgreements.some(
+                      (a) => a.status === "PENDING" || a.status === "FAILED"
+                    ) && (
+                      <Button
+                        type="button"
+                        size="sm"
+                        className="gap-1.5"
+                        disabled={analyzingAll}
+                        onClick={handleAnalyzeAll}
+                      >
+                        {analyzingAll ? (
+                          <Loader2 className="size-3.5 animate-spin" />
+                        ) : (
+                          <Play className="size-3.5" />
+                        )}
+                        {analyzingAll ? "Analysing..." : "Analyse All"}
+                      </Button>
+                    )}
                   </div>
                   <AgreementList
-                    agreements={[activeAgreement]}
+                    agreements={activeAgreements}
                     onAnalyze={handleAnalyze}
                     onCancel={handleCancel}
                     onDelete={handleDeleteAgreement}
                   />
                 </div>
 
-                <AnalysisSection agreement={activeAgreement} />
+                {activeAgreements.map((agreement) => (
+                  <AnalysisSection key={agreement.id} agreement={agreement} />
+                ))}
 
                 <ChatSection
                   key={activeSessionId}
@@ -534,10 +581,14 @@ export default function DashboardPage() {
 }
 
 function AnalysisSection({ agreement }: { agreement: SessionAgreement }) {
+  const [collapsed, setCollapsed] = useState(false)
+
   if (agreement.analysis?.status === "COMPLETED") {
     return (
       <div className="space-y-6">
-        <h2 className="border-b pb-2 text-lg font-semibold">Analysis Results</h2>
+        <h2 className="border-b pb-2 text-lg font-semibold">
+          Analysis Results — {agreement.fileName}
+        </h2>
 
         <Card className="p-4">
           <div className="flex items-center gap-6">
@@ -567,12 +618,21 @@ function AnalysisSection({ agreement }: { agreement: SessionAgreement }) {
                 <p className="text-sm text-muted-foreground">{agreement.analysis.overallSummary}</p>
               ) : null}
             </div>
+            <button
+              type="button"
+              onClick={() => setCollapsed((prev) => !prev)}
+              className="shrink-0 self-start rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              aria-label={collapsed ? "Expand clauses" : "Collapse clauses"}
+            >
+              {collapsed ? <ChevronDown className="size-5" /> : <ChevronUp className="size-5" />}
+            </button>
           </div>
         </Card>
 
-        {agreement.analysis.clauseResults.map((result) => (
-          <ClauseCard key={result.id} result={result} />
-        ))}
+        {!collapsed &&
+          agreement.analysis.clauseResults.map((result) => (
+            <ClauseCard key={result.id} result={result} />
+          ))}
       </div>
     )
   }
