@@ -1,6 +1,7 @@
-import { NextResponse } from "next/server"
+import { NextRequest, NextResponse } from "next/server"
+import { buildAppUrl } from "@/lib/app-url"
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   const clientId = process.env.GOOGLE_CLIENT_ID
   if (!clientId) {
     return NextResponse.json(
@@ -9,7 +10,7 @@ export async function GET() {
     )
   }
 
-  const redirectUri = `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/api/auth/google/callback`
+  const redirectUri = buildAppUrl("/api/auth/google/callback", req)
 
   const params = new URLSearchParams({
     client_id: clientId,

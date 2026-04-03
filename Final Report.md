@@ -426,7 +426,7 @@ Systems Manager (SSM) to pull the latest code and rebuild/restart the Dockerized
 This keeps deployment reproducible without requiring direct SSH-based release steps in the
 repository workflow. The public application base URL is configured externally through the
 `NEXT_PUBLIC_APP_URL` environment variable. In the deployed environment, it is set to
-`https://leaselens.website/`.
+`https://leaselens.website` (no trailing slash).
 
 ## Lessons Learned and Concluding Remarks
 

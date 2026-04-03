@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { UserRole } from "@prisma/client"
 import { attachSessionCookie, createSession } from "@/lib/auth"
+import { buildAppUrl, getAppUrl } from "@/lib/app-url"
 import { prisma } from "@/lib/prisma"
 
 interface GoogleTokenResponse {
@@ -20,7 +21,7 @@ interface GoogleUserInfo {
 export async function GET(req: NextRequest) {
   const code = req.nextUrl.searchParams.get("code")
   const error = req.nextUrl.searchParams.get("error")
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"
+  const appUrl = getAppUrl(req)
 
   if (error || !code) {
     return NextResponse.redirect(`${appUrl}/login?error=oauth_cancelled`)
@@ -33,7 +34,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.redirect(`${appUrl}/login?error=oauth_not_configured`)
   }
 
-  const redirectUri = `${appUrl}/api/auth/google/callback`
+  const redirectUri = buildAppUrl("/api/auth/google/callback", req)
 
   const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
     method: "POST",
@@ -48,6 +49,7 @@ export async function GET(req: NextRequest) {
   })
 
   if (!tokenRes.ok) {
+    console.error("Google OAuth token exchange failed", await tokenRes.text())
     return NextResponse.redirect(`${appUrl}/login?error=oauth_token_failed`)
   }
 
