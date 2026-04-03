@@ -216,7 +216,7 @@ The application integrates with OpenAI (GPT 4o for clause analysis and chat, tex
 LeaseLens supports both email/password registration and Google OAuth sign in. After creating an account or logging in, you are redirected to the dashboard. If you already have an account, use your credentials or click the Google sign in button. New users can sign up with an email, display name, and a password (12 to 64 characters).
 
 <!-- TODO: replace with actual GIF -->
-![Registration and Login](placeholder-registration-login.gif)
+![Registration and Login](project-docs/assets/1.RegistrationAndLogin.gif)
 
 ---
 

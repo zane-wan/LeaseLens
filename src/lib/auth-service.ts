@@ -41,7 +41,7 @@ type AccountUpdateInput = {
   newPassword?: string
 }
 
-const PASSWORD_RESET_EXPIRY_MINUTES = 15
+const PASSWORD_RESET_EXPIRY_MINUTES = 5
 const PASSWORD_RESET_MAX_ATTEMPTS = 5
 
 export function normalizeEmail(email: string): string {
