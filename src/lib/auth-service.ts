@@ -25,6 +25,8 @@ type SignupInput = {
   email: string
   password: string
   name?: string
+  acceptedTerms: true
+  acceptedPrivacy: true
 }
 
 type LoginInput = {
@@ -75,6 +77,9 @@ export async function signupWithPassword(input: SignupInput, req: NextRequest) {
   if (!email) {
     throw new AuthServiceError("Email is required", 400)
   }
+  if (!input.acceptedTerms || !input.acceptedPrivacy) {
+    throw new AuthServiceError("Please agree to the Terms and Privacy Policy", 400)
+  }
 
   await ensureUniqueEmail(email)
   validatePasswordOrThrow(input.password, email)
@@ -82,6 +87,7 @@ export async function signupWithPassword(input: SignupInput, req: NextRequest) {
   const passwordHash = await hashPassword(input.password)
   const userCount = await prisma.user.count()
   const role: UserRole = userCount === 0 ? "OWNER" : "USER"
+  const acceptedAt = new Date()
 
   const user = await prisma.user.create({
     data: {
@@ -89,6 +95,8 @@ export async function signupWithPassword(input: SignupInput, req: NextRequest) {
       name: input.name ?? null,
       role,
       passwordHash,
+      acceptedTermsAt: acceptedAt,
+      acceptedPrivacyAt: acceptedAt,
     },
     select: {
       id: true,

@@ -23,6 +23,8 @@ const signupSchema = z.object({
   email: z.string().email().trim().toLowerCase(),
   password: z.string().min(1),
   name: z.string().trim().min(1).max(80).optional(),
+  acceptedTerms: z.literal(true),
+  acceptedPrivacy: z.literal(true),
 })
 
 const loginSchema = z.object({
@@ -96,7 +98,9 @@ export async function POST(
       const body = await req.json()
       const parsed = signupSchema.safeParse(body)
       if (!parsed.success) {
-        return NextResponse.json({ error: "Invalid signup payload" }, { status: 400 })
+        const message =
+          parsed.error.issues[0]?.message ?? "Invalid signup payload"
+        return NextResponse.json({ error: message }, { status: 400 })
       }
 
       const normalizedEmail = normalizeEmail(parsed.data.email)

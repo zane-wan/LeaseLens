@@ -16,6 +16,8 @@ model User {
   role          UserRole  @default(USER)
   passwordHash  String?
   emailVerified Boolean   @default(false)
+  acceptedTermsAt   DateTime?
+  acceptedPrivacyAt DateTime?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
