@@ -215,7 +215,6 @@ The application integrates with OpenAI (GPT 4o for clause analysis and chat, tex
 
 LeaseLens supports both email/password registration and Google OAuth sign in. After creating an account or logging in, you are redirected to the dashboard. If you already have an account, use your credentials or click the Google sign in button. New users can sign up with an email, display name, and a password (12 to 64 characters).
 
-<!-- TODO: replace with actual GIF -->
 ![Registration and Login](project-docs/assets/1.RegistrationAndLogin.gif)
 
 ---
@@ -224,8 +223,7 @@ LeaseLens supports both email/password registration and Google OAuth sign in. Af
 
 If you forget your password, click "Forgot password?" on the login page. Enter your registered email to receive a verification code via email, then enter the code and set a new password.
 
-<!-- TODO: replace with actual GIF -->
-![Forgot Password Flow](placeholder-forgot-password.gif)
+![Forgot Password Flow](project-docs/assets/2.ForgetPassword.gif)
 
 ---
 
@@ -235,11 +233,10 @@ The dashboard is the main workspace where all lease review activity takes place.
 
 - Use the **"New Session"** button to start a fresh review
 - Use the **"Past Sessions"** dropdown to switch between previous sessions
-- Rename a session by editing its title at the top of the page
+- Rename a session by editing its title
 - Delete a session using the trash icon (this removes all associated files and results)
 
-<!-- TODO: replace with actual GIF -->
-![Dashboard Overview](placeholder-dashboard-overview.gif)
+![Dashboard Overview](project-docs/assets/3.DashboardOverview.gif)
 
 ---
 
@@ -247,8 +244,7 @@ The dashboard is the main workspace where all lease review activity takes place.
 
 Within an active session, drag and drop one or more PDF lease files into the upload zone, or click to open a file picker. Each session supports up to 20 files, with a maximum size of 20 MB per file. After upload, files appear in the agreement list with a PENDING status badge.
 
-<!-- TODO: replace with actual GIF -->
-![Upload Lease Documents](placeholder-upload-lease.gif)
+![Upload Lease Documents](project-docs/assets/4.UploadLease.gif)
 
 ---
 
@@ -261,8 +257,7 @@ Once files are uploaded, you can:
 
 Analysis status updates automatically every few seconds. When processing completes, the results appear directly below the agreement list.
 
-<!-- TODO: replace with actual GIF -->
-![Running Analysis](placeholder-running-analysis.gif)
+![Running Analysis](project-docs/assets/5.RunAnalysis.gif)
 
 ---
 
@@ -281,8 +276,7 @@ After analysis completes, the dashboard displays:
 
 Click on any clause card to expand it and view the full analysis.
 
-<!-- TODO: replace with actual GIF -->
-![Analysis Results](placeholder-analysis-results.gif)
+![Analysis Results](project-docs/assets/6.Results.gif)
 
 ---
 
@@ -290,8 +284,7 @@ Click on any clause card to expand it and view the full analysis.
 
 Click **"View Results"** in the per file dropdown menu to open a dedicated detail page for a single agreement. This page provides the same risk score, compliance summary, and clause by clause cards in a full page layout, along with the file name, upload timestamp, and current status.
 
-<!-- TODO: replace with actual GIF -->
-![Agreement Detail Page](placeholder-agreement-detail.gif)
+![Agreement Detail Page](project-docs/assets/7.Detail.gif)
 
 ---
 
@@ -303,8 +296,7 @@ At the bottom of the dashboard, a chat panel lets you ask follow up questions ab
 - Or select one of the **suggested questions** (e.g., "Is the no pets clause enforceable?")
 - Chat history is saved and persists when you revisit the session
 
-<!-- TODO: replace with actual GIF -->
-![Chat with AI](placeholder-chat-ai.gif)
+![Chat with AI](project-docs/assets/8.Chat.gif)
 
 ---
 
@@ -317,8 +309,7 @@ Access your account settings from the navigation bar. From this page you can:
 - **Manage subscription**: Upgrade to Pro via Stripe Checkout, or manage an existing subscription through the Stripe billing portal
 - **Delete account**: Permanently remove your account by confirming your password and typing "DELETE"
 
-<!-- TODO: replace with actual GIF -->
-![Account Settings](placeholder-account-settings.gif)
+![Account Settings](project-docs/assets/9.Settings.gif)
 
 ---
 
@@ -331,7 +322,7 @@ Click the **Support** link in the navigation bar to open the support inbox. From
 - Select a thread to see the full message history and send replies
 
 <!-- TODO: replace with actual GIF -->
-![Support Inbox](placeholder-support-inbox.gif)
+![Support Inbox](project-docs/assets/placeholder-support-inbox.gif)
 
 ---
 
@@ -347,7 +338,7 @@ Admins can view all registered users along with their email verification status 
 - **Delete User**: Remove a user account from the platform (with confirmation)
 
 <!-- TODO: replace with actual GIF -->
-![Admin User Management](placeholder-admin-users.gif)
+![Admin User Management](project-docs/assets/placeholder-admin-users.gif)
 
 ## Development Guide
 
