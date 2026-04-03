@@ -41,8 +41,8 @@ export async function POST(
       const clientId = getClientIdentifier(req.headers)
       const limit = consumeRateLimit(
         `password-reset-start:${clientId}:${email}`,
-        8,
-        15 * 60 * 1000
+        5,
+        5 * 60 * 1000
       )
       if (!limit.allowed) {
         return NextResponse.json(
@@ -74,7 +74,7 @@ export async function POST(
       const limit = consumeRateLimit(
         `password-reset-send:${clientId}:${email}`,
         5,
-        15 * 60 * 1000
+        5 * 60 * 1000
       )
       if (!limit.allowed) {
         return NextResponse.json(
@@ -105,8 +105,8 @@ export async function POST(
       const clientId = getClientIdentifier(req.headers)
       const limit = consumeRateLimit(
         `password-reset-confirm:${clientId}:${email}`,
-        10,
-        15 * 60 * 1000
+        5,
+        5 * 60 * 1000
       )
       if (!limit.allowed) {
         return NextResponse.json(
