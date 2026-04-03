@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
-import { useAppDispatch } from "@/store"
+import { useAppDispatch, useAppSelector } from "@/store"
 import { clearUser } from "@/store/slices/authSlice"
 
 export function LogoutButton({
@@ -16,6 +16,11 @@ export function LogoutButton({
 }) {
   const router = useRouter()
   const dispatch = useAppDispatch()
+  const storeUser = useAppSelector((state) => state.auth.user)
+
+  const displayName = storeUser?.name ?? name
+  const displayEmail = storeUser?.email ?? email
+  const displayRole = storeUser?.role ?? role
 
   async function onLogout() {
     await fetch("/api/auth/logout", {
@@ -29,11 +34,11 @@ export function LogoutButton({
   return (
     <Button variant="outline" size="sm" onClick={onLogout}>
       Sign out
-      {role === "ADMIN"
+      {displayRole === "ADMIN"
         ? " (Admin)"
-        : role === "OWNER"
+        : displayRole === "OWNER"
           ? " (Owner)"
-          : ` (${name || email})`}
+          : ` (${displayName || displayEmail})`}
     </Button>
   )
 }
