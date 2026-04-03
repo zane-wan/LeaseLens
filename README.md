@@ -321,8 +321,7 @@ Click the **Support** link in the navigation bar to open the support inbox. From
 - View your existing threads and their current status (Open or Closed)
 - Select a thread to see the full message history and send replies
 
-<!-- TODO: replace with actual GIF -->
-![Support Inbox](project-docs/assets/placeholder-support-inbox.gif)
+![Support Inbox](project-docs/assets/10.Support.gif)
 
 ---
 
@@ -337,8 +336,7 @@ Admins can view all registered users along with their email verification status 
 - **Change Role**: Promote or demote users between USER, ADMIN, and OWNER (subject to role hierarchy)
 - **Delete User**: Remove a user account from the platform (with confirmation)
 
-<!-- TODO: replace with actual GIF -->
-![Admin User Management](project-docs/assets/placeholder-admin-users.gif)
+![Admin User Management](project-docs/assets/11.Admin.gif)
 
 ## Development Guide
 
