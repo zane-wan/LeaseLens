@@ -10,26 +10,49 @@ export default async function LoginPage() {
 
   return (
     <div className="grid flex-1 lg:grid-cols-2" style={{ minHeight: "calc(100vh - 5rem)" }}>
-      {/* Left: Promotion / marketing */}
       <div className="flex flex-col justify-between bg-muted p-6 md:p-10 lg:p-12">
-        <div className="space-y-6">
-          <blockquote className="space-y-2 border-l-4 border-primary pl-6 text-lg italic text-muted-foreground md:text-xl">
-            <p>
-              &ldquo;LeaseLens transformed how I review rental agreements. What
-              used to take hours of legal research now takes minutes. The
-              Ontario-specific clauses and red flags are incredibly accurate.&rdquo;
+        <div className="space-y-8">
+          <div className="space-y-3">
+            <p className="text-sm font-medium uppercase tracking-[0.24em] text-muted-foreground">
+              Additional terms
             </p>
-            <footer className="text-sm font-medium not-italic text-foreground">
-              — Tenant, Toronto
-            </footer>
-          </blockquote>
+            <h2 className="text-3xl font-semibold tracking-tight">
+              Grounded review for the clauses that create real risk
+            </h2>
+            <p className="max-w-xl text-base leading-7 text-muted-foreground">
+              LeaseLens focuses on additional terms, schedules, and custom
+              clauses. The analysis is grounded with retrieval from Ontario
+              tenancy sources so results do more than act like a generic chat.
+            </p>
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-3">
+            <div className="rounded-2xl border bg-background/80 p-4">
+              <p className="text-sm font-medium">Custom clauses</p>
+              <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                Pull out additional terms that deserve a closer legal read.
+              </p>
+            </div>
+            <div className="rounded-2xl border bg-background/80 p-4">
+              <p className="text-sm font-medium">RAG grounding</p>
+              <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                Use Ontario source retrieval to reduce hallucination in the
+                final explanation.
+              </p>
+            </div>
+            <div className="rounded-2xl border bg-background/80 p-4">
+              <p className="text-sm font-medium">Many files</p>
+              <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                Review many lease files in one workspace and compare outcomes.
+              </p>
+            </div>
+          </div>
         </div>
         <p className="text-sm text-muted-foreground">
-          AI-powered lease agreement analysis for Ontario residential tenancy law.
+          Built for Ontario lease review with secure sign in and direct support replies.
         </p>
       </div>
 
-      {/* Right: Login form */}
       <div className="flex flex-col items-center justify-center p-6 md:p-10">
         <div className="w-full max-w-sm space-y-6">
           <div className="space-y-2 text-center">

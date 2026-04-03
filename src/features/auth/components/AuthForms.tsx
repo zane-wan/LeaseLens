@@ -169,6 +169,8 @@ export function SignupForm() {
   const [name, setName] = useState("")
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
+  const [acceptedTerms, setAcceptedTerms] = useState(false)
+  const [acceptedPrivacy, setAcceptedPrivacy] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -181,6 +183,8 @@ export function SignupForm() {
       name: name || undefined,
       email,
       password,
+      acceptedTerms,
+      acceptedPrivacy,
     })
     setLoading(false)
 
@@ -252,6 +256,40 @@ export function SignupForm() {
               <p className="text-xs text-muted-foreground">
                 Use 12-64 characters and avoid common passwords.
               </p>
+            </div>
+
+            <div className="space-y-3 rounded-lg border bg-muted/40 p-4">
+              <label className="flex items-start gap-3 text-sm leading-6">
+                <input
+                  type="checkbox"
+                  checked={acceptedTerms}
+                  onChange={(e) => setAcceptedTerms(e.target.checked)}
+                  className="mt-1 size-4 rounded border"
+                  required
+                />
+                <span>
+                  I agree to the{" "}
+                  <Link href="/terms" className="font-medium text-primary underline-offset-4 hover:underline">
+                    Terms
+                  </Link>
+                </span>
+              </label>
+
+              <label className="flex items-start gap-3 text-sm leading-6">
+                <input
+                  type="checkbox"
+                  checked={acceptedPrivacy}
+                  onChange={(e) => setAcceptedPrivacy(e.target.checked)}
+                  className="mt-1 size-4 rounded border"
+                  required
+                />
+                <span>
+                  I have read the{" "}
+                  <Link href="/privacy" className="font-medium text-primary underline-offset-4 hover:underline">
+                    Privacy Policy
+                  </Link>
+                </span>
+              </label>
             </div>
           </CardContent>
 

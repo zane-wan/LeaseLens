@@ -65,7 +65,7 @@ export async function Navbar() {
                 <Button variant="outline" size="sm">Admin</Button>
               </Link>
             ) : null}
-            <LogoutButton identifier={user.email} />
+            <LogoutButton name={user.name} email={user.email} role={user.role} />
           </>
         ) : (
           <Link href="/login">
