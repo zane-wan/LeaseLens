@@ -11,6 +11,7 @@ node_modules
 
 # Documentation & guides (not needed at runtime)
 docs/
+project-docs/
 *.md
 
 # Editor / IDE configs
