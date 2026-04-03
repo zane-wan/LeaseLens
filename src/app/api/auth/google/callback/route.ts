@@ -19,133 +19,150 @@ interface GoogleUserInfo {
 }
 
 export async function GET(req: NextRequest) {
-  const code = req.nextUrl.searchParams.get("code")
-  const error = req.nextUrl.searchParams.get("error")
   const appUrl = getAppUrl(req)
 
-  if (error || !code) {
-    return NextResponse.redirect(`${appUrl}/login?error=oauth_cancelled`)
-  }
+  try {
+    const code = req.nextUrl.searchParams.get("code")
+    const error = req.nextUrl.searchParams.get("error")
 
-  const clientId = process.env.GOOGLE_CLIENT_ID
-  const clientSecret = process.env.GOOGLE_CLIENT_SECRET
+    if (error || !code) {
+      return NextResponse.redirect(`${appUrl}/login?error=oauth_cancelled`)
+    }
 
-  if (!clientId || !clientSecret) {
-    return NextResponse.redirect(`${appUrl}/login?error=oauth_not_configured`)
-  }
+    const clientId = process.env.GOOGLE_CLIENT_ID
+    const clientSecret = process.env.GOOGLE_CLIENT_SECRET
 
-  const redirectUri = buildAppUrl("/api/auth/google/callback", req)
+    if (!clientId || !clientSecret) {
+      return NextResponse.redirect(`${appUrl}/login?error=oauth_not_configured`)
+    }
 
-  const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      code,
-      client_id: clientId,
-      client_secret: clientSecret,
-      redirect_uri: redirectUri,
-      grant_type: "authorization_code",
-    }),
-  })
+    const redirectUri = buildAppUrl("/api/auth/google/callback", req)
 
-  if (!tokenRes.ok) {
-    console.error("Google OAuth token exchange failed", await tokenRes.text())
-    return NextResponse.redirect(`${appUrl}/login?error=oauth_token_failed`)
-  }
-
-  const tokens: GoogleTokenResponse = await tokenRes.json()
-
-  const userRes = await fetch("https://www.googleapis.com/oauth2/v3/userinfo", {
-    headers: { Authorization: `Bearer ${tokens.access_token}` },
-  })
-
-  if (!userRes.ok) {
-    return NextResponse.redirect(`${appUrl}/login?error=oauth_profile_failed`)
-  }
-
-  const googleUser: GoogleUserInfo = await userRes.json()
-  if (!googleUser.email || !googleUser.email_verified) {
-    return NextResponse.redirect(`${appUrl}/login?error=oauth_email_unverified`)
-  }
-  const normalizedEmail = googleUser.email.trim().toLowerCase()
-
-  const existingAccount = await prisma.account.findUnique({
-    where: {
-      providerId_accountId: {
-        providerId: "google",
-        accountId: googleUser.sub,
-      },
-    },
-    include: { user: true },
-  })
-
-  let userId: string
-
-  if (existingAccount) {
-    userId = existingAccount.userId
-    await prisma.account.update({
-      where: { id: existingAccount.id },
-      data: {
-        accessToken: tokens.access_token,
-        refreshToken: tokens.refresh_token ?? existingAccount.refreshToken,
-        accessTokenExpiresAt: new Date(Date.now() + tokens.expires_in * 1000),
-      },
-    })
-  } else {
-    const existingUser = await prisma.user.findUnique({
-      where: { email: normalizedEmail },
+    const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        code,
+        client_id: clientId,
+        client_secret: clientSecret,
+        redirect_uri: redirectUri,
+        grant_type: "authorization_code",
+      }),
     })
 
-    if (existingUser) {
-      userId = existingUser.id
-      await prisma.account.create({
-        data: {
-          userId: existingUser.id,
+    if (!tokenRes.ok) {
+      console.error("Google OAuth token exchange failed", {
+        appUrl,
+        redirectUri,
+        details: await tokenRes.text(),
+      })
+      return NextResponse.redirect(`${appUrl}/login?error=oauth_token_failed`)
+    }
+
+    const tokens: GoogleTokenResponse = await tokenRes.json()
+
+    const userRes = await fetch("https://www.googleapis.com/oauth2/v3/userinfo", {
+      headers: { Authorization: `Bearer ${tokens.access_token}` },
+    })
+
+    if (!userRes.ok) {
+      return NextResponse.redirect(`${appUrl}/login?error=oauth_profile_failed`)
+    }
+
+    const googleUser: GoogleUserInfo = await userRes.json()
+    if (!googleUser.email || !googleUser.email_verified) {
+      return NextResponse.redirect(`${appUrl}/login?error=oauth_email_unverified`)
+    }
+    const normalizedEmail = googleUser.email.trim().toLowerCase()
+
+    const existingAccount = await prisma.account.findUnique({
+      where: {
+        providerId_accountId: {
           providerId: "google",
           accountId: googleUser.sub,
+        },
+      },
+      include: { user: true },
+    })
+
+    let userId: string
+
+    if (existingAccount) {
+      userId = existingAccount.userId
+      await prisma.account.update({
+        where: { id: existingAccount.id },
+        data: {
           accessToken: tokens.access_token,
-          refreshToken: tokens.refresh_token,
+          refreshToken: tokens.refresh_token ?? existingAccount.refreshToken,
           accessTokenExpiresAt: new Date(Date.now() + tokens.expires_in * 1000),
         },
       })
-
-      await prisma.user.update({
-        where: { id: existingUser.id },
-        data: {
-          emailVerified: true,
-          name: existingUser.name || googleUser.name,
-          image: existingUser.image || googleUser.picture,
-        },
-      })
     } else {
-      const userCount = await prisma.user.count()
-      const role: UserRole = userCount === 0 ? "OWNER" : "USER"
+      const existingUser = await prisma.user.findUnique({
+        where: { email: normalizedEmail },
+      })
 
-      const newUser = await prisma.user.create({
-        data: {
-          email: normalizedEmail,
-          name: googleUser.name,
-          image: googleUser.picture,
-          role,
-          emailVerified: true,
-          accounts: {
-            create: {
-              providerId: "google",
-              accountId: googleUser.sub,
-              accessToken: tokens.access_token,
-              refreshToken: tokens.refresh_token,
-              accessTokenExpiresAt: new Date(Date.now() + tokens.expires_in * 1000),
+      if (existingUser) {
+        userId = existingUser.id
+        await prisma.account.create({
+          data: {
+            userId: existingUser.id,
+            providerId: "google",
+            accountId: googleUser.sub,
+            accessToken: tokens.access_token,
+            refreshToken: tokens.refresh_token,
+            accessTokenExpiresAt: new Date(Date.now() + tokens.expires_in * 1000),
+          },
+        })
+
+        await prisma.user.update({
+          where: { id: existingUser.id },
+          data: {
+            emailVerified: true,
+            name: existingUser.name || googleUser.name,
+            image: existingUser.image || googleUser.picture,
+          },
+        })
+      } else {
+        const userCount = await prisma.user.count()
+        const role: UserRole = userCount === 0 ? "OWNER" : "USER"
+
+        const newUser = await prisma.user.create({
+          data: {
+            email: normalizedEmail,
+            name: googleUser.name,
+            image: googleUser.picture,
+            role,
+            emailVerified: true,
+            accounts: {
+              create: {
+                providerId: "google",
+                accountId: googleUser.sub,
+                accessToken: tokens.access_token,
+                refreshToken: tokens.refresh_token,
+                accessTokenExpiresAt: new Date(Date.now() + tokens.expires_in * 1000),
+              },
             },
           },
-        },
-      })
-      userId = newUser.id
+        })
+        userId = newUser.id
+      }
     }
+
+    const session = await createSession(userId, req)
+    const response = NextResponse.redirect(`${appUrl}/dashboard`)
+    attachSessionCookie(response, session.token, session.expiresAt)
+
+    return response
+  } catch (error) {
+    console.error("Google OAuth callback failed unexpectedly", {
+      appUrl,
+      requestOrigin: req.nextUrl.origin,
+      host: req.headers.get("host"),
+      forwardedHost: req.headers.get("x-forwarded-host"),
+      forwardedProto: req.headers.get("x-forwarded-proto"),
+      error: error instanceof Error ? error.message : String(error),
+    })
+    return NextResponse.redirect(`${appUrl}/login?error=oauth_callback_failed`)
   }
-
-  const session = await createSession(userId, req)
-  const response = NextResponse.redirect(`${appUrl}/dashboard`)
-  attachSessionCookie(response, session.token, session.expiresAt)
-
-  return response
 }
