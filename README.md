@@ -32,7 +32,7 @@ Live: https://leaselens.website/
 
 ## Video Demo
 
-Watch the walkthrough here: [Demo]()
+Watch the walkthrough here: [Demo](https://youtu.be/YbLZNCLEfiQ)
 
 ---
 
