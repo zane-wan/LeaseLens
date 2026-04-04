@@ -1,8 +1,72 @@
 # LeaseLens API Reference
 
-## Analysis Pipeline (T5a)
+All endpoints are served from `/api`. Unless noted otherwise, every endpoint requires an authenticated session cookie. Request and response bodies use JSON. Errors follow the shape `{ "error": "message" }`.
 
-The analysis pipeline extracts custom clauses from uploaded lease PDFs, retrieves relevant RTA sections via hybrid search, and produces compliance assessments using GPT-4o.
+---
+
+## Authentication
+
+### Email/Password
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/api/auth/signup` | Create account (email, name, password) |
+| POST | `/api/auth/login` | Sign in with email and password |
+| POST | `/api/auth/logout` | Destroy session |
+| GET | `/api/auth/me` | Return the current authenticated user |
+| PATCH | `/api/auth/account` | Update display name, email, or password |
+| DELETE | `/api/auth/account` | Delete account (requires password confirmation) |
+
+### Password Reset
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/api/auth/password-reset/start` | Initiate reset flow (sends verification code via email) |
+| POST | `/api/auth/password-reset/send-code` | Resend verification code |
+| POST | `/api/auth/password-reset/confirm` | Set new password using verification code |
+
+### Google OAuth
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/auth/google` | Redirect to Google authorization screen |
+| GET | `/api/auth/google/callback` | Handle OAuth callback, create/link account, set session |
+
+---
+
+## Agreements
+
+Agreements represent uploaded lease PDF files.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/agreements` | List agreements for the current user (supports `?sessionId=`) |
+| POST | `/api/agreements` | Create an agreement record from a completed upload intent |
+| DELETE | `/api/agreements/:id` | Delete agreement and its S3 object |
+
+---
+
+## Upload
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/api/upload/presigned` | Generate a presigned S3 upload URL with upload intent tracking |
+
+**Body**
+```json
+{
+  "fileName": "lease.pdf",
+  "fileType": "application/pdf",
+  "fileSize": 1048576,
+  "sessionId": "clx..."
+}
+```
+
+Enforces per session file cap (20 files) and per file size limit (20 MB).
+
+---
+
+## Analysis Pipeline
 
 ### Trigger Analysis
 
@@ -25,7 +89,15 @@ Starts the analysis pipeline in the background. Returns immediately.
 - `403` — not the owner
 - `409` — analysis already in progress
 
-### Poll Analysis Status & Results
+### Cancel Analysis
+
+```
+POST /api/agreements/:id/cancel
+```
+
+Cancels an in progress analysis and resets the agreement status to PENDING.
+
+### Poll Analysis Status and Results
 
 ```
 GET /api/agreements/:id/status
@@ -66,74 +138,59 @@ Returns the current analysis state and results. Poll until `analysis.status` is 
 
 `analysis` is `null` if analysis has never been triggered.
 
+### Get Analysis by ID
+
+```
+GET /api/analyses/:id
+```
+
+Returns detailed analysis results including clause level findings and agreement metadata.
+
 ### Field Reference
 
 | Field | Type | Values |
 |-------|------|--------|
 | `compliance` | enum | `COMPLIANT`, `NON_COMPLIANT`, `NEEDS_REVIEW` |
 | `severity` | enum or null | `LOW`, `MEDIUM`, `HIGH` (null if compliant) |
-| `riskScore` | int | 0–100 (higher = more risky) |
+| `riskScore` | int | 0 to 100 (higher = more risky) |
 | `clauseResults` | array | Ordered by `clauseIndex` |
 
 ### Integration Pattern
 
 ```
-Upload PDF → POST /api/agreements (create record)
-           → POST /api/agreements/:id/analyze (trigger)
-           → Poll GET /api/agreements/:id/status
-             until analysis.status === "COMPLETED" or "FAILED"
+Upload PDF  → POST /api/upload/presigned (get S3 URL)
+            → PUT to presigned URL (upload file)
+            → POST /api/agreements (create record)
+            → POST /api/agreements/:id/analyze (trigger)
+            → Poll GET /api/agreements/:id/status
+              until analysis.status === "COMPLETED" or "FAILED"
 ```
 
 ---
 
 ## Chat Sessions
 
-A chat session groups one or more uploaded agreements and a conversation thread. After analysis, users can chat with the LLM about their lease. The LLM has context of all agreements in the session + their analysis results + RAG-retrieved RTA sections.
+A chat session groups uploaded agreements and a conversation thread. After analysis, users can ask follow up questions grounded in the session's agreement content and RAG retrieved RTA context.
 
-### Create Session
+### Session Management
 
-```
-POST /api/chats/sessions
-```
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/chats/sessions` | List all sessions for the current user |
+| GET | `/api/chats/sessions/latest` | Get most recent session with agreements, analyses, and messages |
+| GET | `/api/chats/sessions/:id` | Get a specific session |
+| POST | `/api/chats/sessions` | Create a new session |
+| PATCH | `/api/chats/sessions/:id` | Rename a session |
+| DELETE | `/api/chats/sessions/:id` | Delete session and all associated agreements and files |
 
-**Body**
-```json
-{
-  "title": "My lease review",
-  "agreementIds": ["clx...", "clx..."]
-}
-```
+### Messages
 
-`agreementIds` is optional. Can link agreements later.
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/chats/sessions/:id/messages` | List all messages in a session |
+| POST | `/api/chats/sessions/:id/messages` | Store a message manually |
 
-**Response** `201`
-```json
-{
-  "id": "clx...",
-  "title": "My lease review",
-  "agreements": [{ "id": "clx...", "fileName": "lease.pdf" }],
-  "createdAt": "...",
-  "updatedAt": "..."
-}
-```
-
-### List Sessions
-
-```
-GET /api/chats/sessions
-```
-
-Returns all sessions for the authenticated user, most recent first.
-
-### Get Latest Session (session restore)
-
-```
-GET /api/chats/sessions/latest
-```
-
-Returns the most recent session with full data: agreements (with analysis + clause results) and all chat messages. Used on page load to restore the user's last session.
-
-### Send Chat Message (streaming)
+### Streaming Chat
 
 ```
 POST /api/chats/sessions/:id/chat
@@ -144,47 +201,44 @@ POST /api/chats/sessions/:id/chat
 { "message": "Can my landlord enforce the no-pets clause?" }
 ```
 
-**Response**: Server-Sent Events (SSE) stream in AI SDK data format. Use the `useChat` hook from `ai/react` on the frontend, or read the stream manually.
+**Response**: Server Sent Events (SSE) stream in Vercel AI SDK data format. Use the `useChat` hook from `ai/react` on the frontend, or read the stream manually.
 
-The backend:
-1. Loads all agreements + analysis results in the session
-2. RAG-retrieves relevant RTA sections for the question
-3. Sends conversation history + context to GPT-4o
-4. Streams the response
-5. Persists both user and assistant messages on completion
+The backend loads all agreements and analysis results in the session, RAG retrieves relevant RTA sections for the question, streams the GPT-4o response, and persists both user and assistant messages on completion.
 
-### List Messages
+---
 
-```
-GET /api/chats/sessions/:id/messages
-```
+## Support
 
-Returns all messages in a session, ordered chronologically.
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/support/threads` | List threads (own threads for users, all threads for admins) |
+| GET | `/api/support/threads/:id` | Get thread detail |
+| POST | `/api/support/threads` | Create a new support thread with subject and message |
+| PATCH | `/api/support/threads/:id` | Update thread status (OPEN / CLOSED) |
+| DELETE | `/api/support/threads/:id` | Delete a thread (admin only) |
+| GET | `/api/support/threads/:id/messages` | List messages in a thread |
+| POST | `/api/support/threads/:id/messages` | Reply to a thread (sends email notification) |
 
-### Store Message (manual)
+---
 
-```
-POST /api/chats/sessions/:id/messages
-```
+## Admin
 
-**Body**
-```json
-{
-  "role": "USER",
-  "content": "...",
-  "citations": []
-}
-```
+Requires ADMIN or OWNER role.
 
-For manually storing messages (e.g., system messages). The streaming chat endpoint (`/chat`) handles persistence automatically.
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/admin/users` | List all registered users with roles and verification status |
+| PATCH | `/api/admin/users/:id` | Update a user's role (respects role hierarchy) |
+| DELETE | `/api/admin/users/:id` | Remove a user account |
 
-### Full User Flow
+---
 
-```
-1. Upload PDFs  → POST /api/agreements (×N, one per file)
-2. Create session → POST /api/chats/sessions { title, agreementIds: [...] }
-3. Analyze        → POST /api/agreements/:id/analyze (per agreement)
-4. Poll           → GET /api/agreements/:id/status (until COMPLETED)
-5. Chat           → POST /api/chats/sessions/:id/chat { message }
-6. Resume         → GET /api/chats/sessions/latest (on re-login)
-```
+## Stripe Billing
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/api/stripe/checkout` | Create a Stripe Checkout session for Pro subscription |
+| POST | `/api/stripe/portal` | Create a Stripe billing portal session for subscription management |
+| POST | `/api/stripe/webhook` | Handle Stripe webhook events (no auth required, verified by signature) |
+
+Webhook events handled: `checkout.session.completed`, `customer.subscription.updated`, `customer.subscription.deleted`.
