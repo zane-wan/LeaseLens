@@ -453,14 +453,18 @@ LeaseLens is a Next.js 15 + TypeScript application backed by PostgreSQL/Prisma, 
 
 7.  Email configuration (optional)
 
-    Password reset emails use AWS SES in production. Locally, `EMAIL_MODE=console` (the default) prints verification codes to the terminal. The remaining email variables in `.env.example` (`SMTP_USER`, `SMTP_PASS`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SUPPORT_FROM_EMAIL`) are only used when `EMAIL_MODE` is `ses` or `smtp` and can be left empty for local development.
+    Locally, `EMAIL_MODE=console` (the default) prints verification codes and support messages to the terminal. Production can use either SMTP compatible delivery with `EMAIL_MODE=ses` or `EMAIL_MODE=smtp`, or Pingram delivery with `EMAIL_MODE=pingram`.
 
-    > **Note for TA / evaluators:** The production AWS SES account is currently in **sandbox
-    > mode** (AWS declined the production access request). This means password reset emails can
-    > only be delivered to email addresses that have been manually added to the SES verified
-    > identities list. If you would like to test the password reset flow on the deployed
-    > application, please contact zihanzane.wan@mail.utoronto.ca to have your email address
-    > added to the SES identity list.
+    For Pingram, verify the sending domain in Pingram first, then set:
+    ```
+    EMAIL_MODE=pingram
+    PINGRAM_API_KEY=pingram_sk_...
+    SUPPORT_FROM_EMAIL="LeaseLens <no-reply@your-domain.com>"
+    SUPPORT_INBOX_EMAIL=support@your-domain.com
+    ```
+    Optional Pingram variables are `PINGRAM_NOTIFICATION_TYPE` (defaults to `leaselens_transactional_email`), `PINGRAM_REGION` (`us`, `eu`, or `ca`), and `PINGRAM_BASE_URL` for a custom API endpoint.
+
+    For SMTP or SES compatible delivery, set `SMTP_USER`, `SMTP_PASS`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, and `SUPPORT_FROM_EMAIL`. If `SMTP_HOST` is omitted and `AWS_REGION` is set, the app uses the matching AWS SES SMTP host.
 
 8.  Local development and testing
     - Start the application and open `http://localhost:3000`:
