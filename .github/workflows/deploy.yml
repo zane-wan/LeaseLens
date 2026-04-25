@@ -69,6 +69,7 @@ jobs:
           export DOCKER_BUILDKIT=1
           export COMPOSE_DOCKER_CLI_BUILD=1
           docker compose up -d --build
+          docker builder prune -f --filter "until=168h"
           docker image prune -f
           SCRIPT_END
 
