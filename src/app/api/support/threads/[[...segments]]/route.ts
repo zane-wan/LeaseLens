@@ -167,15 +167,10 @@ async function createThreadMessage(req: NextRequest, threadId: string) {
   }
 
   const isStaff = isAdminLike(actor.role)
-  if (isStaff && !thread.owner.email) {
-    return NextResponse.json(
-      { error: "This user has no attached email address for outbound delivery" },
-      { status: 400 }
-    )
-  }
+  const supportInbox = process.env.SUPPORT_INBOX_EMAIL?.trim() || "support@leaselens.local"
   const recipientEmail = isStaff
     ? (thread.owner.email as string)
-    : (process.env.SUPPORT_INBOX_EMAIL ?? "support@leaselens.local")
+    : supportInbox
   const subject = parsed.data.subject ?? (isStaff ? `Re: ${thread.subject}` : thread.subject)
 
   const message = await prisma.supportMessage.create({
@@ -200,27 +195,26 @@ async function createThreadMessage(req: NextRequest, threadId: string) {
     },
   })
 
-  const replyTo = isStaff ? (process.env.SUPPORT_INBOX_EMAIL ?? undefined) : actor.email
-  const submitter = actor.name?.trim() ? `${actor.name} <${actor.email}>` : actor.email
+  if (!isStaff) {
+    const submitter = actor.name?.trim() ? `${actor.name} <${actor.email}>` : actor.email
 
-  try {
-    await sendEmail({
-      to: recipientEmail,
-      subject,
-      text: isStaff
-        ? parsed.data.body
-        : [
-            `LeaseLens support message from ${submitter}`,
-            ``,
-            `Thread ID: ${thread.id}`,
-            `Subject: ${subject}`,
-            ``,
-            parsed.data.body,
-          ].join("\n"),
-      replyTo,
-    })
-  } catch (error) {
-    console.error("Failed to deliver support email notification", error)
+    try {
+      await sendEmail({
+        to: recipientEmail,
+        subject,
+        text: [
+          `LeaseLens support message from ${submitter}`,
+          ``,
+          `Thread ID: ${thread.id}`,
+          `Subject: ${subject}`,
+          ``,
+          parsed.data.body,
+        ].join("\n"),
+        replyTo: actor.email,
+      })
+    } catch (error) {
+      console.error("Failed to deliver support email notification", error)
+    }
   }
 
   return NextResponse.json(message, { status: 201 })
