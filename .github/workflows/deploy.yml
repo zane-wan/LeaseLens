@@ -49,10 +49,18 @@ jobs:
           STRIPE_PUBLISHABLE_KEY=${STRIPE_PUBLISHABLE_KEY}
           STRIPE_PRO_PRICE_ID=${STRIPE_PRO_PRICE_ID}
           STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET}
-          EMAIL_MODE=ses
-          SUPPORT_FROM_EMAIL=noreply@leaselens.website
+          EMAIL_MODE=${EMAIL_MODE:-ses}
+          SUPPORT_FROM_EMAIL=${SUPPORT_FROM_EMAIL:-noreply@leaselens.website}
+          SUPPORT_INBOX_EMAIL=${SUPPORT_INBOX_EMAIL:-support@leaselens.local}
+          PINGRAM_API_KEY=${PINGRAM_API_KEY}
+          PINGRAM_NOTIFICATION_TYPE=${PINGRAM_NOTIFICATION_TYPE}
+          PINGRAM_REGION=${PINGRAM_REGION}
+          PINGRAM_BASE_URL=${PINGRAM_BASE_URL}
           SMTP_USER=${SMTP_USER}
           SMTP_PASS=${SMTP_PASS}
+          SMTP_HOST=${SMTP_HOST}
+          SMTP_PORT=${SMTP_PORT:-465}
+          SMTP_SECURE=${SMTP_SECURE}
           ENVEOF
           EOF
 
@@ -126,5 +134,15 @@ jobs:
           STRIPE_PUBLISHABLE_KEY: ${{ secrets.STRIPE_PUBLISHABLE_KEY }}
           STRIPE_PRO_PRICE_ID: ${{ secrets.STRIPE_PRO_PRICE_ID }}
           STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
+          EMAIL_MODE: ${{ secrets.EMAIL_MODE }}
+          SUPPORT_FROM_EMAIL: ${{ secrets.SUPPORT_FROM_EMAIL }}
+          SUPPORT_INBOX_EMAIL: ${{ secrets.SUPPORT_INBOX_EMAIL }}
+          PINGRAM_API_KEY: ${{ secrets.PINGRAM_API_KEY }}
+          PINGRAM_NOTIFICATION_TYPE: ${{ secrets.PINGRAM_NOTIFICATION_TYPE }}
+          PINGRAM_REGION: ${{ secrets.PINGRAM_REGION }}
+          PINGRAM_BASE_URL: ${{ secrets.PINGRAM_BASE_URL }}
           SMTP_USER: ${{ secrets.SMTP_USER }}
           SMTP_PASS: ${{ secrets.SMTP_PASS }}
+          SMTP_HOST: ${{ secrets.SMTP_HOST }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          SMTP_SECURE: ${{ secrets.SMTP_SECURE }}
