@@ -37,9 +37,13 @@ prisma/migrations/*.sql.bak
 .cursor/
 .claude/
 
-docs/
+docs/*
+!docs/eval-pilot-report.md
 
 # Database dumps
 data/rta-chunks.sql
 
 files/
+
+# Private benchmark artifacts
+private_eval/
