@@ -8,6 +8,11 @@ on:
 env:
   AWS_REGION: ca-central-1
 
+# Serialize deploys so two builds never compete for memory on the instance
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -26,6 +31,16 @@ jobs:
           #!/bin/bash
           set -e
           export HOME=/root
+
+          # Ensure swap exists so npm ci inside the image build cannot be
+          # OOM killed while the app containers are running on the same host
+          if ! swapon --show | grep -q '/swapfile'; then
+            dd if=/dev/zero of=/swapfile bs=1M count=2048
+            chmod 600 /swapfile
+            mkswap /swapfile
+            swapon /swapfile
+          fi
+
           git config --global --add safe.directory /home/ec2-user/LeaseLens
           cd /home/ec2-user/LeaseLens
           git pull origin main
