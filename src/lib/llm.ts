@@ -1,4 +1,4 @@
-import { generateObject } from "ai";
+import { generateObject, type LanguageModelUsage } from "ai";
 import { z } from "zod";
 import { analysisModelConfig, systemPrompts } from "@/config/llm";
 
@@ -90,9 +90,18 @@ export async function analyzeClause(
   clause: string,
   legalContext: string[],
 ): Promise<ComplianceResult> {
+  const { result } = await analyzeClauseWithUsage(clause, legalContext);
+  return result;
+}
+
+/** Same as analyzeClause but also surfaces token usage (used by eval tooling). */
+export async function analyzeClauseWithUsage(
+  clause: string,
+  legalContext: string[],
+): Promise<{ result: ComplianceResult; usage: LanguageModelUsage }> {
   const contextBlock = legalContext.join("\n\n");
 
-  const { object } = await generateObject({
+  const { object, usage } = await generateObject({
     model: analysisModelConfig.model,
     schema: complianceResultSchema,
     temperature: analysisModelConfig.temperature,
@@ -101,5 +110,5 @@ export async function analyzeClause(
     prompt: `## Lease clause\n${clause}\n\n## Relevant legal context\n${contextBlock}`,
   });
 
-  return normalizeComplianceResult(clause, object);
+  return { result: normalizeComplianceResult(clause, object), usage };
 }

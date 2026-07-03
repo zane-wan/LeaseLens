@@ -9,7 +9,7 @@
 // Falls back to LLM-based extraction for non-standard formats.
 // ---------------------------------------------------------------------------
 
-import { generateObject } from "ai";
+import { generateObject, type LanguageModelUsage } from "ai";
 import { z } from "zod";
 import { openai } from "@/config/llm";
 
@@ -828,7 +828,15 @@ export type ClauseCategory = (typeof VALID_CATEGORIES)[number];
 export async function categorizeClause(
   clauseText: string,
 ): Promise<ClauseCategory> {
-  const { object } = await generateObject({
+  const { category } = await categorizeClauseWithUsage(clauseText);
+  return category;
+}
+
+/** Same as categorizeClause but also surfaces token usage (used by eval tooling). */
+export async function categorizeClauseWithUsage(
+  clauseText: string,
+): Promise<{ category: ClauseCategory; usage: LanguageModelUsage }> {
+  const { object, usage } = await generateObject({
     model: openai("gpt-4o-mini"),
     schema: z.object({
       category: z
@@ -841,5 +849,5 @@ export async function categorizeClause(
     prompt: clauseText,
   });
 
-  return object.category;
+  return { category: object.category, usage };
 }
