@@ -1,5 +1,6 @@
 # LeaseLens
-Live: https://leaselens.website/
+
+Deployment status: retired
 
 ## Table of Contents
 
@@ -179,7 +180,7 @@ The application integrates with OpenAI (GPT 4o mini for clause analysis, GPT 4o 
 
 **Secure authentication and authorization**: Email/password credentials, JWT backed sessions, Google OAuth, and three tier role separation (USER, ADMIN, OWNER) ensure every route, API endpoint, and query is scoped to the authenticated user's identity and permissions.
 
-**Alignment with course implementation stack**: Built on Next.js 15 App Router, TypeScript, Prisma, PostgreSQL, Redux Toolkit, AWS S3, and OpenAI, deployed as a containerized full stack web application on AWS EC2.
+**Alignment with course implementation stack**: Built on Next.js 15 App Router, TypeScript, Prisma, PostgreSQL, Redux Toolkit, AWS S3, and OpenAI. The project was deployed as a containerized full stack web application on AWS EC2 during active development.
 
 ---
 
@@ -187,8 +188,7 @@ The application integrates with OpenAI (GPT 4o mini for clause analysis, GPT 4o 
 
 > **Quick Test:**
 >
-> - To test the app without local setup, visit the live deployment at [https://leaselens.website/](https://leaselens.website/).
-> - For local development, follow the setup instructions in [Development Guide](#development-guide).
+> The hosted environment has been retired. Follow the setup instructions in [Development Guide](#development-guide) to run the project locally.
 
 ### Registration and Login
 
@@ -482,9 +482,9 @@ LeaseLens is a Next.js 15 + TypeScript application backed by PostgreSQL/Prisma, 
 
 ## Deployment Information
 
-The production application is built from the repository `Dockerfile` as a multi stage Next.js 15 standalone image and started on an AWS EC2 instance via `docker compose up -d --build`. The container is stateless; PostgreSQL runs on a shared AWS RDS instance, and lease PDFs are stored in a private S3 bucket served through presigned URLs. The production environment also requires Google OAuth credentials, SES email delivery, and Stripe secrets.
+The former production application was built from the repository `Dockerfile` as a multi stage Next.js 15 standalone image and started on an AWS EC2 instance via `docker compose up -d --build`. The container was stateless. PostgreSQL ran on AWS RDS, and lease PDFs were stored in a private S3 bucket through presigned URLs.
 
-Deployment is automated in `.github/workflows/deploy.yml`. On each push to `main`, GitHub Actions writes production environment variables from repository secrets onto the EC2 host, then uses AWS Systems Manager (SSM) to pull code and rebuild the container. The public base URL is set via `NEXT_PUBLIC_APP_URL` (`https://leaselens.website`, no trailing slash).
+The AWS production environment and its automatic GitHub Actions deployment have been retired to stop ongoing infrastructure costs. The `Dockerfile` and `docker-compose.yml` remain available for local use or a future deployment.
 
 ## Lessons Learned and Concluding Remarks
 
